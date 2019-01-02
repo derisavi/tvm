@@ -341,6 +341,15 @@ def lower(sch,
         bounds = schedule.InferBound(sch)
         stmt = schedule.ScheduleOps(sch, bounds)
         stmt = ir_pass.InjectPrefetch(stmt)
+    # probably a loop unroll to simplify loops with trip count of 1.
+    # and a round of simplify
+    # a round of loop partition to separate partial and full tiles
+    #   in #142 Tianqi has moved loop partition from before storage flatten to after that
+    #   ask him why
+    # a round of auto-tensorize. it has to be before storage flatten because buffer binding conditions
+    #   are checked in StorageFlatten
+    #   buffer binding conditions related to tensorize need to be moved to autotensorize
+    #   from StorageFlatten
 
     for f in lower_phase0:
         stmt = f(stmt)

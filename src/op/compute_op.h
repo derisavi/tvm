@@ -14,8 +14,8 @@
 
 namespace tvm {
 // loop nest structure for general compute
-// This the loop nest structured used in compute.
-// Does not include the loop body.
+// This is the loop nest structure used in compute.
+// It does not include the loop body.
 struct ComputeLoopNest {
   // The common number of loops between init and main
   size_t num_common_loop;

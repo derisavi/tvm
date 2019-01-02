@@ -16,7 +16,7 @@ namespace tvm {
 using namespace ir;
 using namespace op;
 
-// Detect the region of input and output to be tensrized.
+// Detect the region of input and output to be tensorized.
 // out_dom: the domain of root iter vars in output op
 // in_region: region of each input tensor.
 // return The location of the tensorized scope start.
@@ -30,7 +30,8 @@ size_t InferTensorizeRegion(
   bool found_point = false;
   size_t loc_scope = 0;
   std::unordered_map<IterVar, IntSet> up_state;
-  // Loop over the leafs
+  // Loop over the leafs (iteration variables) starting from the outermost loop
+  // to find the loopnest to be tensorized
   for (size_t i = stage->leaf_iter_vars.size(); i != 0; --i) {
     IterVar iv = stage->leaf_iter_vars[i - 1];
     CHECK(iv->iter_type == kDataPar ||
@@ -41,6 +42,7 @@ size_t InferTensorizeRegion(
     if (is_one(vrange->extent)) {
       up_state[iv] = IntSet::single_point(vrange->min);
     } else if (found_point) {
+      // all loops within the tensorized loopnest must be normalized
       CHECK(is_zero(vrange->min));
       up_state[iv] = IntSet::single_point(iv->var);
     } else {
@@ -63,7 +65,7 @@ size_t InferTensorizeRegion(
   CHECK(found_point);
   // Get domain of the tensorized scope.
   schedule::PassUpDomain(stage, dom_map, &up_state);
-  // Get domains if inputs
+  // Get domains of inputs
   std::unordered_map<Tensor, TensorDom> in_dom;
   std::unordered_map<const Variable*, IntSet> temp_dmap;
   Array<Tensor> inputs = self->InputTensors();
@@ -95,11 +97,16 @@ void VerifyTensorizeLoopNest(const ComputeOpNode* self,
                              const Stage& stage,
                              const ComputeLoopNest& n,
                              size_t tloc) {
-  // Veirfication step.
+  // Verification step.
   std::unordered_set<const Variable*> banned;
+  // The following two conditions are always true by construction
+  // and they are independent of the intrinsic pattern
   CHECK_EQ(n.main_nest.size(), stage->leaf_iter_vars.size() + 1);
   CHECK(n.init_nest.size() == stage->leaf_iter_vars.size() + 1 ||
         n.init_nest.size() == 0);
+
+  // Collect the list of banned variables, i.e., all For iteration variables,
+  // attribute variables, and Let variables in the tensorize scope
   auto f_push_banned = [&banned](const Stmt& s) {
     if (const For* op = s.as<For>()) {
         banned.insert(op->loop_var.get());
@@ -121,6 +128,8 @@ void VerifyTensorizeLoopNest(const ComputeOpNode* self,
       }
     }
   }
+
+  // Make sure banned variables do not appear in split conditions
   for (const Expr& pred : n.main_predicates) {
     if (ir::ExprUseVar(pred, banned)) {
       LOG(FATAL) << "Tensorize failed, split condition "
@@ -136,7 +145,11 @@ void VerifyTensorizeLoopNest(const ComputeOpNode* self,
 }
 
 
-// Remap the tensor placeholder, index and inline things.
+// During initialization, computes a mapping from actual (tensorize) IVs
+// to intrinsic IVs (both regular and reduction IVs)
+// and a mapping from input tensors of actual to input tensor of intrin.
+// During mutation, transforms, using the mappings above, an expression of the body of the actual
+// to how it should look like in the intrinsic
 class TensorIntrinMatcher final : public IRMutator {
  public:
   Expr Mutate_(const Call* op, const Expr& e) final {
@@ -190,11 +203,18 @@ class TensorIntrinMatcher final : public IRMutator {
             const TensorIntrin& intrin,
             Map<Var, Range>* compute_intrin_iter_space) {
     CHECK(self == stage->op.get());
-    // input remap.
+    // TODO: if we do this matching after loops with trip_count=1 are simplified
+    // we don't need to match [1,m,n] with [m,n]
+
+    // build the mapping from input tensors of the tensorize scope (i.e., actual)
+    // to input tensors of the intrinsic
     Array<Tensor> inputs = self->InputTensors();
     CHECK_EQ(inputs.size(), intrin->inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
       InputEntry e;
+      /* change InputEntry::tensor to InputEntry::intrin_tensor
+       * change InputEntry::region to InputEntry::actual_region
+       */
       e.tensor = intrin->inputs[i];
       e.region = Array<Range>(in_region.at(inputs[i]));
       CHECK_GE(e.region.size(), e.tensor.ndim());
@@ -207,9 +227,12 @@ class TensorIntrinMatcher final : public IRMutator {
             << " expected shape=" << e.tensor->shape
             << ", given region=" << e.region;
       }
+      // rename in_remap_ to actual_to_intrin_in_tensor_map_
       in_remap_[inputs[i]] = e;
     }
-    // output remap
+
+    // Ensure that the shapes of the output tensors of the stage to be matched
+    // and the intrinsics are compatible
     const ComputeOpNode* intrin_compute = intrin->op.as<ComputeOpNode>();
     CHECK(intrin_compute) << "Only support compute intrinsic for now";
     CHECK_GE(self->axis.size(), intrin_compute->axis.size())
@@ -224,7 +247,7 @@ class TensorIntrinMatcher final : public IRMutator {
           << ", tensorize-dim=" << self->axis.size();
       var_remap_[self->axis[i]->var.get()] = r->min;
     }
-    // Assume we tensorize at regin axis i [min, min + extent)
+    // Assume we tensorize at region axis i [min, min + extent)
     // The corresponding intrinsic axis is j [0, extent)
     // Remap index i to j + min
     for (size_t i = axis_start; i < self->axis.size(); ++i) {
@@ -266,9 +289,15 @@ class TensorIntrinMatcher final : public IRMutator {
   };
   // input data remap
   std::unordered_map<Tensor, InputEntry> in_remap_;
-  // variable remap.
+  // mapping from iteration variables of the tensorize (actual) scope to a linear
+  // expression of
+  // the corresponding iteration variable of the intrinsic (includes both regular
+  // and reduction
+  // iteration variables)
   std::unordered_map<const Variable*, Expr> var_remap_;
-  // IterVar remap.
+  // mapping from iteration variable of the tensorize (actual) scope to the corresponding
+  // iteration variable of the intrinsic (includes both regular and reduction iteration
+  // variables)
   std::unordered_map<IterVar, IterVar> axis_remap_;
 };
 
@@ -283,6 +312,10 @@ Array<Expr> MatchTensorizeBody(
   TensorIntrinMatcher matcher;
   matcher.Init(self, stage, out_dom, in_region, intrin, compute_intrin_iter_space);
   Array<Expr> ret;
+  // Using the mapping from actual IVs to intrinsic IVs, and mapping from
+  // input tensors of actual (tensorize) scope to input tensors of intrinsic,
+  // transform each expression in the actual body to what it would look like
+  // in the intrinsic
   for (Expr expr : self->body) {
     ret.push_back(matcher.Mutate(expr));
   }
@@ -329,8 +362,9 @@ Stmt MakeTensorize(const ComputeOpNode* self,
   std::unordered_map<IterVar, Range> out_dom;
   std::unordered_map<Tensor, Array<Range> > in_region;
   size_t tloc = InferTensorizeRegion(self, stage, dom_map, &out_dom, &in_region);
+  const auto& tensorize_outermost_loop = stage->leaf_iter_vars[tloc];
   TensorIntrin intrin = stage->iter_var_attrs.at(
-      stage->leaf_iter_vars[tloc])->tensor_intrin;
+      tensorize_outermost_loop)->tensor_intrin;
   CHECK(intrin.defined());
   ComputeLoopNest n = ComputeLoopNest::make(self, stage, dom_map, debug_keep_trivial_loop);
   VerifyTensorizeLoopNest(self, stage, n, tloc);
@@ -397,9 +431,9 @@ Stmt MakeTensorize(const ComputeOpNode* self,
     auto it = out_dom.find(iv);
     CHECK(it != out_dom.end());
     binder.Bind(target->dom->min, make_const(iv->dom->min.type(), 0),
-                "tensir_intrin.reduction.min");
+                "tensor_intrin.reduction.min");
     binder.Bind(target->dom->extent, it->second->extent,
-                "tensir_intrin.reduction.extent");
+                "tensor_intrin.reduction.extent");
   }
   if (tloc <= n.num_common_loop) {
     // Do no need to split reduction

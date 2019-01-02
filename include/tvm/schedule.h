@@ -435,7 +435,10 @@ class StageNode : public Node {
   Operation origin_op;
   /*! \brief All the nodes in the iter var */
   Array<IterVar> all_iter_vars;
-  /*! \brief The current active leaf iter vars in the stage. */
+  /*!
+   * \brief The current active leaf iter vars in the stage.
+   * 0th element refers to the innermost iteration variable
+   */
   Array<IterVar> leaf_iter_vars;
   /*!
    * \brief Specify threads to be launched at the stage.
@@ -449,7 +452,7 @@ class StageNode : public Node {
    * \note Experimental primitive: used by cross thread-reduction.
    */
   Expr store_predicate;
-  /*! \brief The relation bwteen of IterVars */
+  /*! \brief The relation between IterVars stored in reverse topological order*/
   Array<IterVarRelation> relations;
   /*! \brief additional attributes about iter var. */
   Map<IterVar, IterVarAttr> iter_var_attrs;
