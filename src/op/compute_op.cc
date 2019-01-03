@@ -405,8 +405,9 @@ Stmt ComputeOpNode::BuildProvide(
   if (ctype == ComputeType::kCrossThreadReduction) {
     // specially handle cross thread reduction.
     return MakeCrossThreadReduction(this, stage, dom_map, debug_keep_trivial_loop);
-  } else if (ctype == ComputeType::kTensorize) {
-    return MakeTensorize(this, stage, dom_map, debug_keep_trivial_loop);
+  // Don't tensorize in ScheduleOps
+  //} else if (ctype == ComputeType::kTensorize) {
+  //  return MakeTensorize(this, stage, dom_map, debug_keep_trivial_loop);
   } else {
     return MakeComputeStmt(this, stage, dom_map, debug_keep_trivial_loop);
   }
