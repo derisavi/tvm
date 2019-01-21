@@ -30,7 +30,7 @@ size_t InferTensorizeRegion(
   bool found_point = false;
   size_t loc_scope = 0;
   std::unordered_map<IterVar, IntSet> up_state;
-  // Loop over the leafs (iteration variables) starting from the outermost loop
+  // Loop over the leafs (iteration variables) starting from the innermost loop
   // to find the loopnest to be tensorized
   for (size_t i = stage->leaf_iter_vars.size(); i != 0; --i) {
     IterVar iv = stage->leaf_iter_vars[i - 1];
@@ -65,6 +65,9 @@ size_t InferTensorizeRegion(
   CHECK(found_point);
   // Get domain of the tensorized scope.
   schedule::PassUpDomain(stage, dom_map, &up_state);
+  for (auto& e : up_state) {
+    std::cout << "iv: " << e.first << "  up_state: " << e.second << std::endl;
+  }
   // Get domains of inputs
   std::unordered_map<Tensor, TensorDom> in_dom;
   std::unordered_map<const Variable*, IntSet> temp_dmap;
@@ -75,6 +78,7 @@ size_t InferTensorizeRegion(
   for (IterVar iv : self->root_iter_vars()) {
     IntSet iset = up_state.at(iv);
     (*out_dom)[iv] = iset.cover_range(dom_map.at(iv));
+    std::cout << "iv: " << iv << "  Range: " << (*out_dom)[iv] << std::endl;
     temp_dmap[iv->var.get()] = iset;
   }
   // Input domains
@@ -88,9 +92,19 @@ size_t InferTensorizeRegion(
       CHECK(r.defined()) << "cannot deduce region of tensorized scope for input " << t;
       vec.push_back(std::move(r));
     }
+    std::cout << "Tensor: " << t << std::endl;
+    for (auto& e : vec)
+      std::cout << "    " << e << std::endl;
     (*in_region)[t] = std::move(vec);
   }
   return loc_scope;
+}
+
+void VerifyTensorizeLoopNest2(const For* top_for_loop) {
+  // collects predicates and iteration variables in the tensorized scope and
+  // verifies that none of the variables aree used in the predicates
+  CollectPredicatesAndIterVars collectPredicates;
+  collectPredicates.Mutate(top_for_loop);
 }
 
 void VerifyTensorizeLoopNest(const ComputeOpNode* self,
@@ -322,6 +336,14 @@ Array<Expr> MatchTensorizeBody(
   return ret;
 }
 
+void VerifyTensorizeBody2(
+    const For* outermost_loop,
+    const std::unordered_map<IterVar, Range>& out_dom,
+    const std::unordered_map<Tensor, Array<Range> >& in_region,
+    const TensorIntrin& intrin)
+{
+}
+
 void VerifyTensorizeBody(
     const ComputeOpNode* self,
     const Stage& stage,
@@ -353,6 +375,17 @@ void VerifyTensorizeBody(
         << " provided= " << lhs
         << ", intrin=  " << rhs;
   }
+}
+
+Stmt MakeTensorize2(const For* outermost_loop, const TensorIntrin& intrin) {
+  std::unordered_map<IterVar, Range> out_dom;
+  std::unordered_map<Tensor, Array<Range> > in_region;
+  InferTensorizeRegion2()
+  //size_t tloc = InferTensorizeRegion(self, stage, dom_map, &out_dom, &in_region);
+//  const IterVar& tensorize_outermost_loop = op->loop_var
+  VerifyTensorizeLoopNest2(outermost_loop);
+  VerifyTensorizeBody2(outermost_loop, out_dom, in_region, intrin);
+
 }
 
 Stmt MakeTensorize(const ComputeOpNode* self,
@@ -495,6 +528,26 @@ Stmt MakeTensorize(const ComputeOpNode* self,
   }
 }
 
+class Tensorizer : public IRMutator {
+public:
+  Stmt Mutate_(const AttrStmt* op, const Stmt& s) final {
+    if (op->attr_key == "intrin") {
+      const TensorIntrin* intrin = op->node.as<TensorIntrin>();
+      CHECK(intrin && intrin->defined());
+      const For* forLoop = op->body.as<For>();
+      CHECK(forLoop && forLoop->for_type == ForType::Tensorized);
+      return MakeTensorize2(forLoop, *intrin);
+    } else {
+      return IRMutator::Mutate_(op, s);
+    }
+  }
+};
+namespace ir {
+Stmt Tensorize(Stmt stmt)
+{
+  return Tensorizer().Mutate(stmt);
+}
+}
 // Register functions for unittests
 TVM_REGISTER_API("test.op.InferTensorizeRegion")
 .set_body([](TVMArgs args, TVMRetValue* ret) {

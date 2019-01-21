@@ -163,5 +163,6 @@ REGISTER_PASS2(VerifyMemory);
 REGISTER_PASS2(VerifyGPUCode);
 REGISTER_PASS1(DecorateDeviceScope);
 REGISTER_PASS1(InstrumentBoundCheckers);
+REGISTER_PASS1(Tensorize);
 }  // namespace ir
 }  // namespace tvm

@@ -341,6 +341,7 @@ def lower(sch,
         bounds = schedule.InferBound(sch)
         stmt = schedule.ScheduleOps(sch, bounds)
         print(stmt)
+        stmt = ir_pass.Tensorize(stmt)
         stmt = ir_pass.InjectPrefetch(stmt)
     # probably a loop unroll to simplify loops with trip count of 1.
     # and a round of simplify

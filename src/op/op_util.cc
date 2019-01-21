@@ -68,7 +68,11 @@ MakeLoopNest(const Stage& stage,
           case kParallelized: for_type = ForType::Parallel; break;
           case kDataPar: break;
           // Mark the loop as to-be-tensorized and tensorize it later
-          case kTensorized: for_type = ForType::Tensorized; break;
+          case kTensorized:
+#ifdef MOVE_TENSORIZE
+            for_type = ForType::Tensorized;
+#endif
+            break;
           default: LOG(FATAL) << "Unknown iter type"
                               << it_attr->iter_type
                               << " in the iter_var_attrs";
@@ -88,20 +92,36 @@ MakeLoopNest(const Stage& stage,
         nest[i + 1].emplace_back(
             LetStmt::make(var, dom->min, no_op));
         value_map[iv] = dom->min;
-      } else if (is_zero(dom->min)) {
-        nest[i + 1].emplace_back(
-            For::make(var, 0, dom->extent,
-                      for_type, DeviceAPI::None, no_op));
-        value_map[iv] = var;
       } else {
-        Var idx(bind_iv->var->name_hint + ".idx", bind_iv->var.type());
-        nest[i + 1].emplace_back(
-            For::make(idx, 0, dom->extent,
-                      for_type, DeviceAPI::None, no_op));
-        Expr new_value = dom->min + idx;
-        value_map[iv] = new_value;
-        nest[i + 1].emplace_back(
-            LetStmt::make(var, new_value, no_op));
+#ifdef MOVE_TENSORIZE
+        Stmt attrStmt;
+        if (it_attr.defined() && it_attr->iter_type == kTensorized) {
+          attrStmt = AttrStmt::make(it_attr->tensor_intrin,
+                                    "intrin",
+                                    make_const(Int(32), 1),
+                                    no_op);
+          nest[i+1].emplace_back(attrStmt);
+        }
+#endif
+        if (is_zero(dom->min) != 0) {
+          nest[i + 1].emplace_back(
+                  For::make(var, 0, dom->extent,
+                            for_type, DeviceAPI::None, no_op));
+          value_map[iv] = var;
+//          if (attrStmt.defined())
+//            nest[i + 1].emplace_back(attrStmt);
+        } else {
+          Var idx(bind_iv->var->name_hint + ".idx", bind_iv->var.type());
+          nest[i + 1].emplace_back(
+                  For::make(idx, 0, dom->extent,
+                            for_type, DeviceAPI::None, no_op));
+//          if (attrStmt.defined())
+//            nest[i+1].emplace_back(attrStmt);
+          Expr new_value = dom->min + idx;
+          value_map[iv] = new_value;
+          nest[i + 1].emplace_back(
+                  LetStmt::make(var, new_value, no_op));
+        }
       }
       if (it_attr.defined() && it_attr->prefetch_data.size() != 0) {
         CHECK(!is_one(dom->extent))

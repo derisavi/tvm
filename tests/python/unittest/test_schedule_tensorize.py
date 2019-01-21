@@ -231,5 +231,5 @@ def test_tensorize_op():
 
 if __name__ == "__main__":
     test_tensorize_vadd()
-    test_tensorize_matmul()
-    test_tensorize_op()
+#    test_tensorize_matmul()
+#    test_tensorize_op()

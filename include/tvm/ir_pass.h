@@ -18,6 +18,7 @@
 #include "schedule.h"
 #include "lowered_func.h"
 
+#define MOVE_TENSORIZE
 namespace tvm {
 namespace ir {
 
@@ -343,6 +344,8 @@ Stmt LowerStorageAccessInfo(Stmt stmt);
  * \return Transformed stmt.
  */
 Stmt DecorateDeviceScope(Stmt stmt);
+
+Stmt Tensorize(Stmt stmt);
 
 /*!
  * \brief Make an user callable API LoweredFunc.
