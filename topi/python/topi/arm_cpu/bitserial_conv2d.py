@@ -352,7 +352,7 @@ def schedule_bitserial_conv2d_nhwc(outs):
             data_q = data_vec.op.input_tensors[0]
             data = data_q.op.input_tensors[0]
             data_pad = None
-            if isinstance(data_q.op, tvm.tensor.ComputeOp) and "pad" in data_q.op.tag:
+            if isinstance(data_q.op, tvm.tensor.ScalarComputeOp) and "pad" in data_q.op.tag:
                 data_pad = data_q
                 data_q = data
                 data = data_q.op.input_tensors[0]

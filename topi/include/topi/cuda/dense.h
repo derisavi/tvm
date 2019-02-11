@@ -79,7 +79,7 @@ inline Schedule schedule_dense(const Target &target, const Array<Tensor>& outs) 
 
   auto _schedule = [&](const Tensor& dense) {
     auto num_thread = 64;
-    auto k = dense->op.as<ComputeOpNode>()->reduce_axis[0];
+    auto k = dense->op.as<ScalarComputeOpNode>()->reduce_axis[0];
     IterVar ko, kf;
     s[dense].split(k, num_thread, &ko, &kf);
     auto dense_f = s.rfactor(dense, kf)[0];
@@ -89,12 +89,14 @@ inline Schedule schedule_dense(const Target &target, const Array<Tensor>& outs) 
       out = dense;
     } else {
       out = outs[0]->op.output(0);
-      s[dense].compute_at(s[out], s[out]->op.as<ComputeOpNode>()->axis[1]);
+      s[dense].compute_at(s[out], s[out]->op.as<ScalarComputeOpNode>()->axis[1]);
     }
-    s[out].bind(s[out]->op.as<ComputeOpNode>()->axis[0], tvm::thread_axis(Range(), "blockIdx.y"));
-    s[out].bind(s[out]->op.as<ComputeOpNode>()->axis[1], tvm::thread_axis(Range(), "blockIdx.x"));
+    s[out].bind(s[out]->op.as<ScalarComputeOpNode>()->axis[0],
+                tvm::thread_axis(Range(), "blockIdx.y"));
+    s[out].bind(s[out]->op.as<ScalarComputeOpNode>()->axis[1],
+                tvm::thread_axis(Range(), "blockIdx.x"));
 
-    auto tx = s[dense]->op.as<ComputeOpNode>()->reduce_axis[0];
+    auto tx = s[dense]->op.as<ScalarComputeOpNode>()->reduce_axis[0];
     auto thread_x = tvm::thread_axis(Range(), "threadIdx.x");
     s[dense].bind(tx, thread_x);
     s[dense_f].compute_at(s[dense], tx);

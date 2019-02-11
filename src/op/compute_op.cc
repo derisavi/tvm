@@ -20,14 +20,14 @@ namespace tvm {
 using namespace ir;
 
 TVM_STATIC_IR_FUNCTOR(IRPrinter, vtable)
-.set_dispatch<ComputeOpNode>([](const ComputeOpNode *op, IRPrinter *p) {
-    p->stream << "compute(" << op->name << ", " << op << ")";
+.set_dispatch<ScalarComputeOpNode>([](const ScalarComputeOpNode *op, IRPrinter *p) {
+    p->stream << "scalar_compute_op(" << op->name << ", " << op << ")";
 });
 
-TVM_REGISTER_NODE_TYPE(ComputeOpNode);
+TVM_REGISTER_NODE_TYPE(ScalarComputeOpNode);
 
-/// Verify if ComputeOp is valid with respect to Reduce operations.
-static void VerifyComputeOp(const ComputeOpNode *op);
+/// Verify if ScalarComputeOp is valid with respect to Reduce operations.
+static void VerifyComputeOp(const ScalarComputeOpNode *op);
 
 inline bool ReduceEqual(const ir::Reduce* a, const ir::Reduce* b) {
   return (a->combiner.same_as(b->combiner)) &&
@@ -36,7 +36,7 @@ inline bool ReduceEqual(const ir::Reduce* a, const ir::Reduce* b) {
          (a->condition.same_as(b->condition));
 }
 
-int ComputeOpNode::num_outputs() const {
+int ScalarComputeOpNode::num_outputs() const {
   return body.size();
 }
 
@@ -49,20 +49,20 @@ Array<IterVar> ComputeOpNode::root_iter_vars() const {
   return ret;
 }
 
-Type ComputeOpNode::output_dtype(size_t idx) const {
+Type ScalarComputeOpNode::output_dtype(size_t idx) const {
   CHECK_LT(idx, num_outputs());
   return body[idx].type();
 }
 
 Array<Expr> ComputeOpNode::output_shape(size_t idx) const {
   CHECK_LT(idx, num_outputs());
-  // for now, all outputs of ComputeOp have the same shape
-  std::vector<Expr> shape;
-  for (size_t i = 0; i < axis.size(); ++i) {
-    const Range& r = axis[i]->dom;
+  // for now, all outputs of a ComputeOp have the same shape
+  Array<Expr> shape;
+  for (const auto& ivar : this->axis) {
+    const Range& r = ivar->dom;
     shape.push_back(r->extent);
   }
-  return Array<Expr>(shape);
+  return shape;
 }
 
 Tensor compute(Array<Expr> shape,
@@ -70,7 +70,7 @@ Tensor compute(Array<Expr> shape,
                std::string name,
                std::string tag,
                Map<std::string, NodeRef> attrs) {
-  auto op_node = make_node<ComputeOpNode>();
+  auto op_node = make_node<ScalarComputeOpNode>();
   // compute dimension.
   size_t ndim = shape.size();
   std::vector<IterVar> axis;
@@ -83,7 +83,7 @@ Tensor compute(Array<Expr> shape,
     args.push_back(axis.back()->var);
   }
 
-  return ComputeOpNode::make(
+  return ScalarComputeOpNode::make(
       name, tag, attrs, axis, {fcompute(args)}).output(0);
 }
 
@@ -92,7 +92,7 @@ Array<Tensor> compute(Array<Expr> shape,
                       std::string name,
                       std::string tag,
                       Map<std::string, NodeRef> attrs) {
-  auto op_node = make_node<ComputeOpNode>();
+  auto op_node = make_node<ScalarComputeOpNode>();
   // compute dimension.
   size_t ndim = shape.size();
   std::vector<IterVar> axis;
@@ -105,7 +105,7 @@ Array<Tensor> compute(Array<Expr> shape,
     args.push_back(axis.back()->var);
   }
 
-  Operation op = ComputeOpNode::make(name, tag, attrs, axis, fcompute(args));
+  Operation op = ScalarComputeOpNode::make(name, tag, attrs, axis, fcompute(args));
   Array<Tensor> outputs;
   for (int idx = 0; idx < op->num_outputs(); ++idx) {
     outputs.push_back(op.output(idx));
@@ -113,15 +113,15 @@ Array<Tensor> compute(Array<Expr> shape,
   return outputs;
 }
 
-Operation ComputeOpNode::make(std::string name,
-                              std::string tag,
-                              Map<std::string, NodeRef> attrs,
-                              Array<IterVar> axis,
-                              Array<Expr> body) {
+Operation ScalarComputeOpNode::make(std::string name,
+                                    std::string tag,
+                                    Map<std::string, NodeRef> attrs,
+                                    Array<IterVar> axis,
+                                    Array<Expr> body) {
   if (!attrs.defined()) {
     attrs = Map<std::string, NodeRef>();
   }
-  auto n = make_node<ComputeOpNode>();
+  auto n = make_node<ScalarComputeOpNode>();
   n->name = std::move(name);
   n->tag = std::move(tag);
   n->attrs = std::move(attrs);
@@ -136,7 +136,7 @@ Operation ComputeOpNode::make(std::string name,
 }
 
 // The schedule related logics
-Array<Tensor> ComputeOpNode::InputTensors() const {
+Array<Tensor> ScalarComputeOpNode::InputTensors() const {
   Array<Tensor> ret;
   std::unordered_set<Tensor> visited;
   for (auto& e : body) {
@@ -154,7 +154,7 @@ Array<Tensor> ComputeOpNode::InputTensors() const {
   return ret;
 }
 
-Operation ComputeOpNode::ReplaceInputs(
+Operation ScalarComputeOpNode::ReplaceInputs(
     const Operation& self,
     const std::unordered_map<Tensor, Tensor>& rmap) const {
   CHECK_EQ(self.operator->(), this);
@@ -181,14 +181,14 @@ Operation ComputeOpNode::ReplaceInputs(
       });
   }
   if (!arr.same_as(this->body)) {
-    return ComputeOpNode::make(
+    return ScalarComputeOpNode::make(
         this->name, this->tag, this->attrs, this->axis, arr);
   } else {
     return self;
   }
 }
 
-void ComputeOpNode::PropBoundToInputs(
+void ScalarComputeOpNode::PropBoundToInputs(
     const Operation& self,
     const std::unordered_map<const Variable*, IntSet>& dom_map,
     std::unordered_map<Tensor, TensorDom>* out_dom_map) const {
@@ -228,19 +228,19 @@ void ComputeOpNode::GatherBound(
 Stmt ComputeOpNode::BuildRealize(
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& realize_map,
-    const Stmt& realize_body) const {
+    const Stmt& body) const {
   CHECK_EQ(stage->op.get(), this);
   HalideIR::Internal::Region bounds;
   for (IterVar iv : this->axis) {
     bounds.push_back(realize_map.at(iv));
   }
-  Stmt realize = realize_body;
+  Stmt realize = body;
   for (int i = this->num_outputs(); i > 0; --i) {
     Tensor t = stage->op.output(i-1);
     realize = ir::Realize::make(t->op, t->value_index,
       t->dtype, bounds, const_true(), realize);
     // alignment requirement, only useful for compute
-    for (size_t i = 0; i < this->axis.size(); ++i) {
+    for (size_t i = 0; i < num_schedulable_dims(); ++i) {
       auto it = stage->iter_var_attrs.find(this->axis[i]);
       if (it != stage->iter_var_attrs.end()) {
         IterVarAttr attr = (*it).second;
@@ -259,8 +259,12 @@ Stmt ComputeOpNode::BuildRealize(
   return realize;
 }
 
+size_t ScalarComputeOpNode::num_schedulable_dims() const {
+  return axis.size();
+}
+
 // Build a reduction body.
-void MakeReduction(const ComputeOpNode* op,
+void MakeReduction(const ScalarComputeOpNode* op,
                    const Array<Tensor>& tensors,
                    Stmt* init,
                    Stmt* provide) {
@@ -296,7 +300,7 @@ void MakeReduction(const ComputeOpNode* op,
 }
 
 // Normal computation.
-Stmt MakeProvide(const ComputeOpNode* op,
+Stmt MakeProvide(const ScalarComputeOpNode* op,
                  const Tensor& t) {
   Array<Expr> args;
   for (IterVar iv : op->axis) {
@@ -305,7 +309,7 @@ Stmt MakeProvide(const ComputeOpNode* op,
   return Provide::make(t->op, t->value_index, op->body[t->value_index], args);
 }
 
-Stmt MakeComputeStmt(const ComputeOpNode* self,
+Stmt MakeComputeStmt(const ScalarComputeOpNode* self,
                      const Stage& stage,
                      const std::unordered_map<IterVar, Range>& dom_map,
                      bool debug_keep_trivial_loop) {
@@ -357,7 +361,7 @@ enum class ComputeType {
   kTensorize
 };
 
-ComputeType DetectComputeType(const ComputeOpNode* self,
+ComputeType DetectComputeType(const ScalarComputeOpNode* self,
                               const Stage& stage) {
   // Verify correctness of leaf nest.
   int normal_red = 0, thread_red = 0, tensorize = 0;
@@ -397,7 +401,7 @@ ComputeType DetectComputeType(const ComputeOpNode* self,
 }
 
 // implement the provide utility.
-Stmt ComputeOpNode::BuildProvide(
+Stmt ScalarComputeOpNode::BuildProvide(
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& dom_map,
     bool debug_keep_trivial_loop) const {
@@ -440,8 +444,8 @@ ComputeLoopNest ComputeLoopNest::make(
     for (IterVar iv : self->reduce_axis) {
       update_state[iv] = 2;
     }
-    for (IterVar iv : self->axis) {
-      update_state[iv] = 1;
+    for (size_t i = 0; i < self->num_schedulable_dims(); ++i) {
+      update_state[self->axis[i]] = 1;
     }
     // find which iter var is related to reduction and which is related to axis.
     schedule::PassDownBitMaskOr(stage, &update_state);
@@ -481,7 +485,7 @@ ComputeLoopNest ComputeLoopNest::make(
 
 namespace {
 /*!
- * \brief Verify if ComputeOp is valid with respect to Reduce operations.
+ * \brief Verify if ScalarComputeOp is valid with respect to Reduce operations.
  *
  *  The following two properties are verified:
  *  (1) All Reduce operations must exist at top level.
@@ -493,7 +497,7 @@ class ComputeVerifier final : protected ir::IRVisitor {
  public:
   /// Special member functions
   //@{
-  explicit ComputeVerifier(const ComputeOpNode* compute)
+  explicit ComputeVerifier(const ScalarComputeOpNode* compute)
       : compute_(compute), reduce_(compute->body[0].as<ir::Reduce>()) {}
   virtual ~ComputeVerifier() = default;
   ComputeVerifier(const ComputeVerifier&) = delete;
@@ -508,12 +512,12 @@ class ComputeVerifier final : protected ir::IRVisitor {
       // Check for consistency of top level reductions
       const ir::Reduce* reduce = e.as<ir::Reduce>();
       CHECK((reduce && reduce_) || (!reduce && !reduce_))
-          << "All ComputeOp should be consistent "
+          << "All ScalarComputeOp should be consistent "
           << "with being Reduce operation or not.";
 
       if (reduce && reduce_) {
         CHECK(ReduceEqual(reduce, reduce_))
-            << "The Reduce inputs of ComputeOp should "
+            << "The Reduce inputs of ScalarComputeOp should "
             << "have the same attribute except value_index";
       }
 
@@ -540,14 +544,14 @@ class ComputeVerifier final : protected ir::IRVisitor {
   //@}
 
  private:
-  const ComputeOpNode* compute_{nullptr};  ///< ComputeOpNode to verify
+  const ScalarComputeOpNode* compute_{nullptr};  ///< ComputeOpNode to verify
   const ir::Reduce* reduce_{nullptr};      ///< Top level Reduce operation
   int level_{0};                           ///< Level of op being processed
 };
 }  // namespace
 
-/// Verify if ComputeOp is valid with respect to Reduce operations.
-static void VerifyComputeOp(const ComputeOpNode* op) {
+/// Verify if ScalarComputeOp is valid with respect to Reduce operations.
+static void VerifyComputeOp(const ScalarComputeOpNode* op) {
   ComputeVerifier v(op);
   v.Run();
 }

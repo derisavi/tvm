@@ -54,13 +54,13 @@ Here, types of ``A``, ``B``, ``C`` are ``tvm.tensor.Tensor``, defined in ``pytho
 
 The Node system is the basis of exposing C++ types to frontend languages, including Python. The way TVM implements Python wrapping is not straightforward. It is briefly covered in `this document <https://docs.tvm.ai/dev/runtime.html#tvm-node-and-compiler-stack>`_, and details are in ``python/tvm/_ffi/`` if you are interested.
 
-``Tensor`` is created by functions in ``python/tvm/api.py``, which in turn calls into C++ functions exposed in ``src/api/api_lang.cc``. All C++ functions that are callable from Python are exposed in the ``src/api`` subdirectory. For example, the ``tvm.compute()`` function above calls into ``_ComputeOp`` api exposed in ``src/api/api_lang.cc``:
+``Tensor`` is created by functions in ``python/tvm/api.py``, which in turn calls into C++ functions exposed in ``src/api/api_lang.cc``. All C++ functions that are callable from Python are exposed in the ``src/api`` subdirectory. For example, the ``tvm.compute()`` function above calls into ``_ScalarComputeOp`` api exposed in ``src/api/api_lang.cc``:
 
 ::
 
-   TVM_REGISTER_API("_ComputeOp")
+   TVM_REGISTER_API("_ScalarComputeOp")
    .set_body([](TVMArgs args,  TVMRetValue* ret) {
-       *ret = ComputeOpNode::make(args[0],
+       *ret = ScalarComputeOpNode::make(args[0],
                                   args[1],
                                   args[2],
                                   args[3],

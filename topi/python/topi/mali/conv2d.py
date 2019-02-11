@@ -89,7 +89,7 @@ def schedule_conv2d_nchw_mali(cfg, outs):
                 kernel = kernel_vec.op.input_tensors[0]
             else:
                 kernel = kernel_vec
-            if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+            if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
                 s[kernel].compute_inline()
 
             _schedule_spatial_pack(cfg, s, output, conv, data_vec, kernel_vec)
@@ -113,12 +113,13 @@ def _schedule_spatial_pack(cfg, s, output, conv, data_vec, kernel_vec):
     BW, TW, VW = cfg["tile_ow"].size
 
     # schedule padding
-    if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
+    if isinstance(data.op, tvm.tensor.ScalarComputeOp) and "pad" in data.op.tag:
         data_pad = data
         s[data_pad].compute_inline()
 
     # schedule data packing
-    if isinstance(data_vec.op, tvm.tensor.ComputeOp) and data_vec.op.name == 'data_vec_undilated':
+    if (isinstance(data_vec.op, tvm.tensor.ScalarComputeOp) and
+            data_vec.op.name == 'data_vec_undilated'):
         _, h, w, ci, _, _, vh, vw = s[data_vec].op.axis
     else:
         _, h, w, ci, vh, vw = s[data_vec].op.axis
@@ -128,7 +129,7 @@ def _schedule_spatial_pack(cfg, s, output, conv, data_vec, kernel_vec):
     if vw.dom.extent.value < max_unroll:
         s[data_vec].unroll(vw)
 
-    if isinstance(kernel_vec.op, tvm.tensor.ComputeOp) and kernel_vec.name == 'kernel_vec':
+    if isinstance(kernel_vec.op, tvm.tensor.ScalarComputeOp) and kernel_vec.name == 'kernel_vec':
         if autotvm.GLOBAL_SCOPE.in_tuning:
             # kernel packing will be pre-computed during compilation, so we skip
             # this part to make tuning records correct
@@ -360,7 +361,7 @@ def _schedule_winograd(cfg, s, op):
     s[data_pad].compute_inline()
 
     # transform kernel
-    if isinstance(U.op, tvm.tensor.ComputeOp):
+    if isinstance(U.op, tvm.tensor.ScalarComputeOp):
         kernel, G = s[U].op.input_tensors
         s[G].compute_inline()
         eps, nu, co, ci, vco, = s[U].op.axis
@@ -376,7 +377,7 @@ def _schedule_winograd(cfg, s, op):
             tile_and_bind(s, U, co, ci, 1, 256)
 
         # dilation
-        if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+        if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
             s[kernel].compute_inline()
 
     # transform image

@@ -34,7 +34,7 @@ def schedule_direct_cuda(cfg, s, conv):
     pad_data, kernel = s[conv].op.input_tensors
 
     s[pad_data].compute_inline()
-    if isinstance(kernel.op, tvm.tensor.ComputeOp) and 'dilate' in kernel.op.tag:
+    if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and 'dilate' in kernel.op.tag:
         s[kernel].compute_inline()
 
     if conv.op in s.outputs:

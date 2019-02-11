@@ -42,22 +42,23 @@ inline Schedule schedule_region(const Target &target, const Array<Tensor>& outs)
     auto block_x = tvm::thread_axis(Range(), "blockIdx.x");
     auto thread_x = tvm::thread_axis(Range(0, num_thread), "threadIdx.x");
 
-    s[max_elem].bind(max_elem->op.as<ComputeOpNode>()->axis[0], block_x);
-    auto k = expsum->op.as<ComputeOpNode>()->reduce_axis[0];
+    s[max_elem].bind(max_elem->op.as<ScalarComputeOpNode>()->axis[0], block_x);
+    auto k = expsum->op.as<ScalarComputeOpNode>()->reduce_axis[0];
     IterVar ko, ki;
     s[expsum].split(k, num_thread, &ko, &ki);
     auto ef = s.rfactor(expsum, ki)[0];
 
-    s[expsum].bind(s[expsum]->op.as<ComputeOpNode>()->axis[0], block_x);
-    s[expsum].bind(s[expsum]->op.as<ComputeOpNode>()->reduce_axis[0], thread_x);
-    s[ef].compute_at(s[expsum], s[expsum]->op.as<ComputeOpNode>()->reduce_axis[0]);
+    s[expsum].bind(s[expsum]->op.as<ScalarComputeOpNode>()->axis[0], block_x);
+    s[expsum].bind(s[expsum]->op.as<ScalarComputeOpNode>()->reduce_axis[0], thread_x);
+    s[ef].compute_at(s[expsum], s[expsum]->op.as<ScalarComputeOpNode>()->reduce_axis[0]);
 
     s[expsum].set_store_predicate(static_cast<Expr>(thread_x) == 0);
     IterVar tx, xi;
-    s[softmax_op].split_by_nparts(softmax_op.as<ComputeOpNode>()->axis[1], num_thread, &tx, &xi);
+    s[softmax_op].split_by_nparts(softmax_op.as<ScalarComputeOpNode>()->axis[1],
+                                  num_thread, &tx, &xi);
     s[softmax_op].bind(tx, thread_x);
 
-    return max_elem->op.as<ComputeOpNode>()->InputTensors()[0];
+    return max_elem->op.as<ScalarComputeOpNode>()->InputTensors()[0];
   };
 
   std::function<void(Operation)> traverse;
@@ -83,7 +84,7 @@ inline Schedule schedule_region(const Target &target, const Array<Tensor>& outs)
   };
 
   traverse(outs[0]->op);
-  auto k = output->op.as<ComputeOpNode>()->axis[0];
+  auto k = output->op.as<ScalarComputeOpNode>()->axis[0];
   IterVar bx, tx;
   s[output].split(k, num_thread, &bx, &tx);
   s[output].bind(bx, tvm::thread_axis(Range(), "blockIdx.x"));

@@ -19,7 +19,7 @@ TEST(BuildModule, Basic) {
 
   auto s = create_schedule({ C->op });
 
-  auto cAxis = C->op.as<ComputeOpNode>()->axis;
+  auto cAxis = C->op.as<ScalarComputeOpNode>()->axis;
 
   IterVar bx, tx;
   s[C].split(cAxis[0], 64, &bx, &tx);

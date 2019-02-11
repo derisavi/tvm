@@ -135,7 +135,7 @@ def schedule_conv2d_transpose_nchw_cuda(cfg, outs):
                 cfg.define_knob("unroll_explicit", [0, 1])
             ##### space definition end #####
 
-            if isinstance(kernel.op, tvm.tensor.ComputeOp) and 'dilate' in kernel.op.tag:
+            if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and 'dilate' in kernel.op.tag:
                 s[kernel].compute_inline()
 
             if conv.op in s.outputs:

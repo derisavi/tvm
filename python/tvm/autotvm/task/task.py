@@ -356,7 +356,7 @@ def compute_flop(sch):
         """accumulate flops"""
         ret = 0
         for op in ops:
-            if isinstance(op, tensor.ComputeOp):
+            if isinstance(op, tensor.ScalarComputeOp):
                 num_element = _prod_length(op.axis)
 
                 body = op.body

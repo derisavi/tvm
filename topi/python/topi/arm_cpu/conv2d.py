@@ -90,7 +90,7 @@ def schedule_conv2d_nchw_arm_cpu(cfg, outs):
                 kernel = kernel_vec.op.input_tensors[0]
             else:
                 kernel = kernel_vec
-            if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+            if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
                 s[kernel].compute_inline()
 
             _schedule_spatial_pack(cfg, s, data_vec, kernel_vec, conv, output, outs[0])
@@ -430,7 +430,7 @@ def _schedule_winograd(cfg, s, output, last):
     s[d].compute_inline()
 
     # transform kernel
-    if isinstance(U.op, tvm.tensor.ComputeOp):
+    if isinstance(U.op, tvm.tensor.ScalarComputeOp):
         kernel, G = U.op.input_tensors
         s[G].compute_inline()
         eps, nu, k, c, kk, = s[U].op.axis
@@ -446,7 +446,7 @@ def _schedule_winograd(cfg, s, output, last):
             s[U].vectorize(kk)
             s[U].parallel(k)
 
-        if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+        if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
             s[kernel].compute_inline()
 
     # transform image

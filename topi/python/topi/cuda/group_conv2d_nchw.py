@@ -142,7 +142,7 @@ def schedule_group_conv2d_NCHWc_int8(cfg, s, output):
     conv = output.op.input_tensors[0]
     packed_data, packed_kernel = conv.op.input_tensors
 
-    if isinstance(packed_data.op, tvm.tensor.ComputeOp) and "pad" in packed_data.op.tag:
+    if isinstance(packed_data.op, tvm.tensor.ScalarComputeOp) and "pad" in packed_data.op.tag:
         pad_data = packed_data
         packed_data = pad_data.op.input_tensors[0]
     else:
@@ -155,7 +155,7 @@ def schedule_group_conv2d_NCHWc_int8(cfg, s, output):
         s[packed_kernel].pragma(
             s[packed_kernel].op.axis[0], "debug_skip_region")
     else:
-        if isinstance(packed_kernel.op, tvm.tensor.ComputeOp) and\
+        if isinstance(packed_kernel.op, tvm.tensor.ScalarComputeOp) and\
                 packed_kernel.name == 'packed_kernel':
             # data and kernel are not pre-computed, schedule layout transform here
             _schedule_injective(packed_data.op, s)

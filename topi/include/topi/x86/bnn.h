@@ -31,7 +31,7 @@ inline Schedule schedule_binarize_pack(const Target &target, const Array<Tensor>
   auto s = create_schedule(out_ops);
 
   auto _schedule = [&](const Tensor& out) {
-    s[out].parallel(out->op.as<ComputeOpNode>()->axis[0]);
+    s[out].parallel(out->op.as<ScalarComputeOpNode>()->axis[0]);
   };
 
   std::function<void(Operation)> traverse;
@@ -64,8 +64,8 @@ inline Schedule schedule_binary_dense(const Target &target, const Array<Tensor>&
 
   auto _schedule = [&](const Tensor& A, const Tensor& B, const Tensor& C) {
     IterVar co, ci;
-    s[C].split(s[C]->op.as<ComputeOpNode>()->reduce_axis[0], 8, &co, &ci);
-    s[C].parallel(s[C]->op.as<ComputeOpNode>()->axis[0]);
+    s[C].split(s[C]->op.as<ScalarComputeOpNode>()->reduce_axis[0], 8, &co, &ci);
+    s[C].parallel(s[C]->op.as<ScalarComputeOpNode>()->axis[0]);
 
     Tensor out;
     if (detail::contains(s->outputs, C->op)) {
@@ -75,7 +75,7 @@ inline Schedule schedule_binary_dense(const Target &target, const Array<Tensor>&
     }
 
     IterVar xo, xi;
-    s[out].split(out->op.as<ComputeOpNode>()->axis[1], 8, &xo, &xi);
+    s[out].split(out->op.as<ScalarComputeOpNode>()->axis[1], 8, &xo, &xi);
     s[out].vectorize(xi);
   };
 

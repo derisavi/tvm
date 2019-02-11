@@ -57,7 +57,7 @@ def schedule_depthwise_conv2d_nchw_cuda(cfg, outs):
             ##### space definition end #####
 
             s[pad_data].compute_inline()
-            if isinstance(kernel.op, tvm.tensor.ComputeOp) and 'dilate' in kernel.op.tag:
+            if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and 'dilate' in kernel.op.tag:
                 s[kernel].compute_inline()
 
             if conv.op in s.outputs:
@@ -188,7 +188,7 @@ def schedule_depthwise_conv2d_nhwc(outs):
         if OP.tag == 'depthwise_conv2d_nhwc':
             PaddedInput = OP.input_tensors[0]
             Filter = OP.input_tensors[1]
-            if isinstance(Filter.op, tvm.tensor.ComputeOp) and 'dilate' in Filter.op.tag:
+            if isinstance(Filter.op, tvm.tensor.ScalarComputeOp) and 'dilate' in Filter.op.tag:
                 s[Filter].compute_inline()
             DepthwiseConv2d = OP.output(0)
             _schedule(PaddedInput, Filter, DepthwiseConv2d)

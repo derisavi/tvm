@@ -204,7 +204,7 @@ def schedule_winograd_cuda(cfg, s, output, pre_computed):
     else:
         kernel = kernel_pack
 
-    if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+    if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
         s[kernel].compute_inline()
 
     ##### space definition begin #####

@@ -90,7 +90,7 @@ def schedule_pool(outs, layout):
     outs = [outs] if isinstance(outs, tvm.tensor.Tensor) else outs
     s = tvm.create_schedule([x.op for x in outs])
     def _schedule(PaddedInput, Pool):
-        if isinstance(PaddedInput.op, tvm.tensor.ComputeOp):
+        if isinstance(PaddedInput.op, tvm.tensor.ScalarComputeOp):
             s[PaddedInput].compute_inline()
         num_thread = tvm.target.current_target(allow_none=False).max_num_threads
         if Pool.op in s.outputs:

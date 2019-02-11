@@ -34,18 +34,18 @@ inline Schedule schedule_lrn(const Target &target, const Array<Tensor>& outs) {
   Tensor sqr_sum_up = lrn->op->InputTensors()[1];
   Tensor sqr_sum = sqr_sum_up->op->InputTensors()[0];
   Tensor set_pad = sqr_sum->op->InputTensors()[0];
-  s[set_pad].bind(set_pad->op.as<ComputeOpNode>()->axis[0], block_x);
-  IterVar rxk = sqr_sum->op.as<ComputeOpNode>()->reduce_axis[0];
+  s[set_pad].bind(set_pad->op.as<ScalarComputeOpNode>()->axis[0], block_x);
+  IterVar rxk = sqr_sum->op.as<ScalarComputeOpNode>()->reduce_axis[0];
   IterVar xko, xki;
   s[sqr_sum].split(rxk, num_thread, &xko, &xki);
   Tensor srf = s.rfactor(sqr_sum, xki)[0];
-  s[sqr_sum].bind(s[sqr_sum]->op.as<ComputeOpNode>()->axis[0], block_x);
-  s[sqr_sum].bind(s[sqr_sum]->op.as<ComputeOpNode>()->reduce_axis[0], thread_x);
-  s[srf].compute_at(s[sqr_sum], s[sqr_sum]->op.as<ComputeOpNode>()->reduce_axis[0]);
-  s[sqr_sum_up].bind(sqr_sum_up->op.as<ComputeOpNode>()->axis[0], block_x);
+  s[sqr_sum].bind(s[sqr_sum]->op.as<ScalarComputeOpNode>()->axis[0], block_x);
+  s[sqr_sum].bind(s[sqr_sum]->op.as<ScalarComputeOpNode>()->reduce_axis[0], thread_x);
+  s[srf].compute_at(s[sqr_sum], s[sqr_sum]->op.as<ScalarComputeOpNode>()->reduce_axis[0]);
+  s[sqr_sum_up].bind(sqr_sum_up->op.as<ScalarComputeOpNode>()->axis[0], block_x);
   IterVar xto, xti;
-  s[lrn].split_by_nparts(lrn->op.as<ComputeOpNode>()->axis[1], num_thread, &xto, &xti);
-  s[lrn].bind(lrn->op.as<ComputeOpNode>()->axis[0], block_x);
+  s[lrn].split_by_nparts(lrn->op.as<ScalarComputeOpNode>()->axis[1], num_thread, &xto, &xti);
+  s[lrn].bind(lrn->op.as<ScalarComputeOpNode>()->axis[0], block_x);
   s[lrn].bind(xto, thread_x);
 
   return s;
@@ -94,9 +94,9 @@ inline Schedule schedule_l2_normalize(const Target &target, const Array<Tensor>&
   IterVar block_x = tvm::thread_axis(Range(), "blockIdx.x");
   IterVar thread_x = tvm::thread_axis(Range(0, num_thread), "threadIdx.x");
   IterVar xto, xti;
-  s[l2_normalize].split_by_nparts(l2_normalize->op.as<ComputeOpNode>()->axis[1],
+  s[l2_normalize].split_by_nparts(l2_normalize->op.as<ScalarComputeOpNode>()->axis[1],
                                  num_thread, &xto, &xti);
-  s[l2_normalize].bind(l2_normalize->op.as<ComputeOpNode>()->axis[0], block_x);
+  s[l2_normalize].bind(l2_normalize->op.as<ScalarComputeOpNode>()->axis[0], block_x);
   s[l2_normalize].bind(xto, thread_x);
   return s;
 }

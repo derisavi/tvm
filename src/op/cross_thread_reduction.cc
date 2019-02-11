@@ -11,7 +11,7 @@ namespace tvm {
 using namespace ir;
 
 Stmt MakeCrossThreadReduction(
-    const ComputeOpNode* self,
+    const ScalarComputeOpNode* self,
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& dom_map,
     bool debug_keep_trivial_loop) {

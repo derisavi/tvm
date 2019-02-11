@@ -308,7 +308,7 @@ def compute(shape, fcompute, name="compute", tag="", attrs=None):
         if not isinstance(body, (list, tuple)):
             body = [body]
         body = convert(body)
-        op_node = _api_internal._ComputeOp(
+        op_node = _api_internal._ScalarComputeOp(
             name, tag, attrs, dim_var, body)
 
     num = op_node.num_outputs

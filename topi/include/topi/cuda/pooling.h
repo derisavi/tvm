@@ -33,7 +33,7 @@ inline Schedule schedule_pool(const Target &target, const Array<Tensor>& outs) {
   auto s = create_schedule(out_ops);
 
   auto _schedule = [&](const Tensor& padded_input, const Tensor& pool) {
-    if (padded_input->op->is_type<ComputeOpNode>()) {
+    if (padded_input->op->is_type<ScalarComputeOpNode>()) {
       s[padded_input].compute_inline();
     }
     auto num_thread = target->max_num_threads;
@@ -46,7 +46,7 @@ inline Schedule schedule_pool(const Target &target, const Array<Tensor>& outs) {
       out = outs[0]->op.output(0);
       s[pool].set_scope("local");
     }
-    auto fused = detail::Fuse(s[out], s[out]->op.as<ComputeOpNode>()->axis);
+    auto fused = detail::Fuse(s[out], s[out]->op.as<ScalarComputeOpNode>()->axis);
     IterVar bx, tx;
     s[out].split(fused, num_thread, &bx, &tx);
     s[out].bind(bx, tvm::thread_axis(Range(), "blockIdx.x"));
@@ -115,8 +115,8 @@ inline Schedule schedule_global_pool(const Target &target, const Array<Tensor>& 
       s[pool].set_scope("local");
     }
 
-    auto i = s[out]->op.as<ComputeOpNode>()->axis[0];
-    auto c = s[out]->op.as<ComputeOpNode>()->axis[1];
+    auto i = s[out]->op.as<ScalarComputeOpNode>()->axis[0];
+    auto c = s[out]->op.as<ScalarComputeOpNode>()->axis[1];
 
     IterVar by, ty;
     s[out].split(i, num_thread, &by, &ty);

@@ -279,7 +279,7 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
   sch->InvalidateCache();
   Tensor tensor = tensor_array[0];
   Stage orig_stage = sch[tensor->op];
-  const ComputeOpNode* compute = orig_stage->op.as<ComputeOpNode>();
+  const ScalarComputeOpNode* compute = orig_stage->op.as<ScalarComputeOpNode>();
 
   std::unordered_set<IterVar> red_axis;
   Array<IterVar> new_axis;
@@ -333,7 +333,7 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
       args.push_back(value_map.at(iv));
     }
   }
-  Operation cache_op = ComputeOpNode::make(
+  Operation cache_op = ScalarComputeOpNode::make(
       compute->name + "." + scope, compute->tag, compute->attrs,
       new_axis, body_list);
 
@@ -342,7 +342,7 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
     Tensor cache_tensor = cache_op.output(i);
     cache_expr_list.push_back(cache_tensor(args));
   }
-  Operation orig_new_op = ComputeOpNode::make(
+  Operation orig_new_op = ScalarComputeOpNode::make(
       compute->name, compute->tag, compute->attrs,
       compute->axis, cache_expr_list);
   return ReplaceOriginalOp(sch, orig_stage, scope,
@@ -429,7 +429,7 @@ Array<Tensor> CacheWriteWithReLayoutTensor(Schedule sch,
     Tensor cache_tensor = cache_op.output(i);
     cache_expr_list.push_back(cache_tensor(args));
   }
-  Operation orig_new_op = ComputeOpNode::make(
+  Operation orig_new_op = ScalarComputeOpNode::make(
       tensor_op->name, tensor_op->tag, {},
       compute_axis, cache_expr_list);
   return ReplaceOriginalOp(sch, orig_stage, scope,
@@ -444,7 +444,7 @@ Array<Tensor> Schedule::cache_write(const Array<Tensor>& tensor_array,
       << "size of tensor_array must be greater than 0";
   Tensor tensor = tensor_array[0];
   Stage orig_stage = operator[](tensor->op);
-  const ComputeOpNode* compute = tensor->op.as<ComputeOpNode>();
+  const ScalarComputeOpNode* compute = tensor->op.as<ScalarComputeOpNode>();
   CHECK(static_cast<size_t>(compute->num_outputs()) == tensor_array.size())
       << "size of input tensor list must be same as number of stage outputs";
   for (size_t i = 1; i < tensor_array.size(); i++) {
@@ -461,12 +461,12 @@ Tensor Schedule::cache_write(const Tensor& tensor,
   // support original compute and tensor compute both
   (*this)->InvalidateCache();
   const char* type_key = tensor->op->type_key();
-  if (!strcmp(type_key, "ComputeOp")) {
+  if (!strcmp(type_key, "ScalarComputeOp")) {
     return (CacheWriteWithReLayout(*this, {tensor}, scope))[0];
   } else if (!strcmp(type_key, "TensorComputeOp")) {
     return (CacheWriteWithReLayoutTensor(*this, {tensor}, scope))[0];
   } else {
-    LOG(FATAL) << "cache write only take ComputeOp or TensorComputeOp as writers";
+    LOG(FATAL) << "cache write only take ScalarComputeOp or TensorComputeOp as writers";
     return Tensor();
   }
 }
@@ -529,7 +529,7 @@ void InjectInline(ScheduleNode* sch) {
       Expr body;
       {
         // setup args
-        const ComputeOpNode* compute = stage->op.as<ComputeOpNode>();
+        const ScalarComputeOpNode* compute = stage->op.as<ScalarComputeOpNode>();
         CHECK(compute)
             << "can only inline compute op";
         for (auto iv : compute->axis) {
@@ -541,7 +541,7 @@ void InjectInline(ScheduleNode* sch) {
       }
       for (size_t j = i; j < sch->stages.size(); ++j) {
         Stage s = sch->stages[j];
-        const ComputeOpNode* compute = s->op.as<ComputeOpNode>();
+        const ScalarComputeOpNode* compute = s->op.as<ScalarComputeOpNode>();
         if (compute) {
           if (!new_body[j].size()) {
             new_body[j] = compute->body;
@@ -553,7 +553,7 @@ void InjectInline(ScheduleNode* sch) {
               const ir::Reduce* reduce_ = new_body[j][k].as<ir::Reduce>();
               CHECK(reduce_);
               CHECK(ReduceEqual(reduce_, reduce))
-                  << "The Reduce inputs of ComputeOp should "
+                  << "The Reduce inputs of ScalarComputeOp should "
                   << "have the same attribute except value_index";
             }
             Expr new_value = ir::Inline(ir::Evaluate::make(new_body[j][0]),
@@ -591,11 +591,11 @@ void InjectInline(ScheduleNode* sch) {
     if (s->attach_type == kInlinedAlready) continue;
     if (new_body[i].size()) {
       // Logics from ReplaceDataFlow
-      const ComputeOpNode* compute = sch->stages[i]->op.as<ComputeOpNode>();
+      const ScalarComputeOpNode* compute = sch->stages[i]->op.as<ScalarComputeOpNode>();
       CHECK(compute);
       Operation op = s->op;
       if (changed[i]) {
-        op = ComputeOpNode::make(
+        op = ScalarComputeOpNode::make(
             compute->name, compute->tag, compute->attrs,
             compute->axis, new_body[i]);
       }
@@ -634,8 +634,8 @@ Array<Tensor> Schedule::rfactor(const Tensor& tensor,
   CHECK_EQ(axis->iter_type, kCommReduce)
       << "Can only factor reduction axis";
   Stage reduce_stage = operator[](tensor->op);
-  const ComputeOpNode* compute_op = reduce_stage->op.as<ComputeOpNode>();
-  CHECK(compute_op) << "Can only factor ComputeOp";
+  const ScalarComputeOpNode* compute_op = reduce_stage->op.as<ScalarComputeOpNode>();
+  CHECK(compute_op) << "Can only factor ScalarComputeOp";
   ArrayNode* leaf_vars = reduce_stage->leaf_iter_vars.CopyOnWrite();
   {
     size_t axis_pos = FindNodeRef(leaf_vars, axis);
@@ -684,7 +684,7 @@ Array<Tensor> Schedule::rfactor(const Tensor& tensor,
   const int factor_axis_pos = \
       factor_axis >= 0 ? factor_axis : static_cast<int>(compute_op->axis.size() + 1) + factor_axis;
   CHECK_LE(factor_axis_pos, compute_op->axis.size());
-  auto n = make_node<ComputeOpNode>();
+  auto n = make_node<ScalarComputeOpNode>();
   n->name = compute_op->name + ".rf";
   {
     // axis relacement.

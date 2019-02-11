@@ -49,7 +49,7 @@ inline Schedule default_schedule_auto_inline(const Target& target, Array<Tensor>
   auto s = create_schedule(out_ops);
   auto x = outs[0];
   tvm::schedule::AutoInlineInjective(s);
-  auto axis = s[x]->op.as<ComputeOpNode>()->axis;
+  auto axis = s[x]->op.as<ScalarComputeOpNode>()->axis;
   if (axis.size() > 0) {
     detail::Fuse(s[x], axis);
   }

@@ -21,7 +21,7 @@ using namespace op;
 // in_region: region of each input tensor.
 // return The location of the tensorized scope start.
 size_t InferTensorizeRegion(
-    const ComputeOpNode* self,
+    const ScalarComputeOpNode* self,
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& dom_map,
     std::unordered_map<IterVar, Range>* out_dom,
@@ -91,7 +91,7 @@ size_t InferTensorizeRegion(
   return loc_scope;
 }
 
-void VerifyTensorizeLoopNest(const ComputeOpNode* self,
+void VerifyTensorizeLoopNest(const ScalarComputeOpNode* self,
                              const Stage& stage,
                              const ComputeLoopNest& n,
                              size_t tloc) {
@@ -183,7 +183,7 @@ class TensorIntrinMatcher final : public IRMutator {
         op->combiner, op->source, axis, op->condition, op->value_index);
   }
 
-  void Init(const ComputeOpNode* self,
+  void Init(const ScalarComputeOpNode* self,
             const Stage& stage,
             const std::unordered_map<IterVar, Range>& out_dom,
             const std::unordered_map<Tensor, Array<Range> >& in_region,
@@ -210,7 +210,7 @@ class TensorIntrinMatcher final : public IRMutator {
       in_remap_[inputs[i]] = e;
     }
     // output remap
-    const ComputeOpNode* intrin_compute = intrin->op.as<ComputeOpNode>();
+    const ScalarComputeOpNode* intrin_compute = intrin->op.as<ScalarComputeOpNode>();
     CHECK(intrin_compute) << "Only support compute intrinsic for now";
     CHECK_GE(self->axis.size(), intrin_compute->axis.size())
         << "Tensorize: Output mismatch with tensor intrin ";
@@ -274,7 +274,7 @@ class TensorIntrinMatcher final : public IRMutator {
 
 // Try to match tensor dataflow of the stage with the intrinsic
 Array<Expr> MatchTensorizeBody(
-    const ComputeOpNode* self,
+    const ScalarComputeOpNode* self,
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& out_dom,
     const std::unordered_map<Tensor, Array<Range> >& in_region,
@@ -290,7 +290,7 @@ Array<Expr> MatchTensorizeBody(
 }
 
 void VerifyTensorizeBody(
-    const ComputeOpNode* self,
+    const ScalarComputeOpNode* self,
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& out_dom,
     const std::unordered_map<Tensor, Array<Range> >& in_region,
@@ -298,7 +298,7 @@ void VerifyTensorizeBody(
   Map<Var, Range> compute_intrin_iter_space;
   Array<Expr> body = MatchTensorizeBody(self, stage, out_dom, in_region, intrin,
                                         &compute_intrin_iter_space);
-  const ComputeOpNode* intrin_compute = intrin->op.as<ComputeOpNode>();
+  const ScalarComputeOpNode* intrin_compute = intrin->op.as<ScalarComputeOpNode>();
   CHECK(intrin_compute) << "Only support compute intrinsic for now";
   CHECK_EQ(body.size(), intrin_compute->body.size())
       << "Tensorize failed: body size mismatch";
@@ -322,7 +322,7 @@ void VerifyTensorizeBody(
   }
 }
 
-Stmt MakeTensorize(const ComputeOpNode* self,
+Stmt MakeTensorize(const ScalarComputeOpNode* self,
                    const Stage& stage,
                    const std::unordered_map<IterVar, Range>& dom_map,
                    bool debug_keep_trivial_loop) {
@@ -359,7 +359,7 @@ Stmt MakeTensorize(const ComputeOpNode* self,
         Call::make(Handle(), ir::intrinsic::tvm_tuple, tuple, Call::Intrinsic), nop));
   }
   // output binding
-  const ComputeOpNode* intrin_compute = intrin->op.as<ComputeOpNode>();
+  const ScalarComputeOpNode* intrin_compute = intrin->op.as<ScalarComputeOpNode>();
   CHECK(intrin_compute) << "Only support compute intrinsic for now";
   CHECK_EQ(intrin->inputs.size() + intrin_compute->body.size(), intrin->buffers.size());
   CHECK_EQ(intrin_compute->body.size(), self->body.size());
@@ -468,8 +468,8 @@ TVM_REGISTER_API("test.op.InferTensorizeRegion")
     Map<IterVar, Range> dmap = args[1];
     std::unordered_map<IterVar, Range> out_dom;
     std::unordered_map<Tensor, Array<Range> > in_region;
-    CHECK(stage->op.as<ComputeOpNode>());
-    InferTensorizeRegion(stage->op.as<ComputeOpNode>(),
+    CHECK(stage->op.as<ScalarComputeOpNode>());
+    InferTensorizeRegion(stage->op.as<ScalarComputeOpNode>(),
                          stage,
                          as_unordered_map(dmap),
                          &out_dom, &in_region);
@@ -484,8 +484,8 @@ TVM_REGISTER_API("test.op.MatchTensorizeBody")
     Map<Tensor, Array<Range> > in_region = args[2];
     TensorIntrin intrin = args[3];
     Map<Var, Range> vrange;
-    CHECK(stage->op.as<ComputeOpNode>());
-    *ret = MatchTensorizeBody(stage->op.as<ComputeOpNode>(),
+    CHECK(stage->op.as<ScalarComputeOpNode>());
+    *ret = MatchTensorizeBody(stage->op.as<ScalarComputeOpNode>(),
                               stage,
                               as_unordered_map(out_dom),
                               as_unordered_map(in_region),

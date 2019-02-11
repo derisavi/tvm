@@ -58,7 +58,7 @@ def schedule_depthwise_conv2d_nchw_mali(cfg, outs):
         tile_and_bind3d(s, pad_data, c, y, x, cfg["tile_c"].size[1], 1, 1)
 
         # schedule dilation
-        if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+        if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
             s[kernel].compute_inline()
 
         # schedule conv

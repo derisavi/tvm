@@ -32,7 +32,7 @@ inline Schedule schedule_injective(const Target &target, const Array<Tensor>& ou
   tvm::schedule::AutoInlineInjective(s);
 
   auto x = outs[0];
-  auto axis = s[x]->op.as<ComputeOpNode>()->axis;
+  auto axis = s[x]->op.as<ScalarComputeOpNode>()->axis;
   if (axis.size() == 4) {
     auto n = axis[0];
     auto c = axis[1];

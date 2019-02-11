@@ -146,7 +146,6 @@ class PlaceholderOp(Operation):
     """Placeholder operation."""
     pass
 
-
 @register_node
 class ComputeOp(Operation):
     """Compute operation."""
@@ -160,9 +159,13 @@ class ComputeOp(Operation):
         """Represent axis of reductions, only defined when it is a ComputeOp"""
         return self.__getattr__("reduce_axis")
 
+@register_node
+class ScalarComputeOp(ComputeOp):
+    """Scalar operation."""
+    pass
 
 @register_node
-class TensorComputeOp(Operation):
+class TensorComputeOp(ComputeOp):
     """Tensor operation."""
     pass
 

@@ -349,7 +349,7 @@ def schedule_packed_conv2d(outs):
     conv2d_stage = conv2d_res[0].output(0)
 
     data, kernel = conv2d_stage.op.input_tensors
-    if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
+    if isinstance(data.op, tvm.tensor.ScalarComputeOp) and "pad" in data.op.tag:
         temp = data.op.input_tensors[0]
         pad_data = data
         data = temp

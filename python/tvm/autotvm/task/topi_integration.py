@@ -213,7 +213,7 @@ def register_topi_compute(topi_compute, target_keys, template_keys, func=None):
     After the registration, this topi compute will become a configuration dispatcher. It uses
     all its argument as workload and dispatches configurations according to the input workload.
 
-    It also stores this "workload" to its final ComputeOp, which can be used to reconstruct
+    It also stores this "workload" to its final ScalarComputeOp, which can be used to reconstruct
     "workload" in the following topi_schedule call.
 
     Parameters
@@ -272,8 +272,8 @@ def register_topi_compute(topi_compute, target_keys, template_keys, func=None):
                 for k, v in node.op.attrs.items():
                     attrs[k] = v
                 attrs['workload'] = args_to_workload(args, topi_compute)
-                if isinstance(op, tensor.ComputeOp):
-                    op = _api_internal._ComputeOp(
+                if isinstance(op, tensor.ScalarComputeOp):
+                    op = _api_internal._ScalarComputeOp(
                         op.name, op.tag, attrs, op.axis, op.body)
                 elif isinstance(op, tensor.ExternOp):
                     op = _api_internal._ExternOp(
@@ -301,7 +301,7 @@ def register_topi_schedule(topi_schedule, target_keys, template_keys, func=None)
     After the registration. This topi schedule will become a configuration dispatcher. It dispatches
     configurations according to the input workload.
 
-    Note that this function will try to find "workload" from all the ComputeOp in the input.
+    Note that this function will try to find "workload" from all the ScalarComputeOp in the input.
     You can attach "workload" to your compute op by using :any:`register_topi_compute`.
 
     Parameters

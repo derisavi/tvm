@@ -14,6 +14,14 @@ tvm.tensor
     :members:
     :show-inheritance:
 
+.. autoclass:: tvm.tensor.ScalarComputeOp
+    :members:
+    :show-inheritance:
+
+.. autoclass:: tvm.tensor.TesnorComputeOp
+    :members:
+    :show-inheritance:
+
 .. autoclass:: tvm.tensor.PlaceholderOp
     :members:
     :show-inheritance:

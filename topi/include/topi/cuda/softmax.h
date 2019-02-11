@@ -39,19 +39,19 @@ inline Schedule schedule_softmax(const Target &target, const Array<Tensor>& outs
   auto block_x = tvm::thread_axis(Range(), "blockIdx.x");
   auto thread_x = tvm::thread_axis(Range(0, num_thread), "threadIdx.x");
 
-  s[max_elem].bind(max_elem->op.as<ComputeOpNode>()->axis[0], block_x);
+  s[max_elem].bind(max_elem->op.as<ScalarComputeOpNode>()->axis[0], block_x);
 
-  auto k = expsum->op.as<ComputeOpNode>()->reduce_axis[0];
+  auto k = expsum->op.as<ScalarComputeOpNode>()->reduce_axis[0];
   IterVar ko, ki;
   s[expsum].split(k, num_thread, &ko, &ki);
   auto EF = s.rfactor(expsum, ki)[0];
-  s[expsum].bind(s[expsum]->op.as<ComputeOpNode>()->axis[0], block_x);
-  s[expsum].bind(s[expsum]->op.as<ComputeOpNode>()->reduce_axis[0], thread_x);
-  s[EF].compute_at(s[expsum], s[expsum]->op.as<ComputeOpNode>()->reduce_axis[0]);
+  s[expsum].bind(s[expsum]->op.as<ScalarComputeOpNode>()->axis[0], block_x);
+  s[expsum].bind(s[expsum]->op.as<ScalarComputeOpNode>()->reduce_axis[0], thread_x);
+  s[EF].compute_at(s[expsum], s[expsum]->op.as<ScalarComputeOpNode>()->reduce_axis[0]);
   s[expsum].set_store_predicate(thread_x->var == 0);
 
   IterVar tx, xi;
-  s[softmax].split_by_nparts(softmax->op.as<ComputeOpNode>()->axis[1], num_thread, &tx, &xi);
+  s[softmax].split_by_nparts(softmax->op.as<ScalarComputeOpNode>()->axis[1], num_thread, &tx, &xi);
   s[softmax].bind(tx, thread_x);
 
   return s;

@@ -269,13 +269,13 @@ TVM_REGISTER_API("_Placeholder")
                        args[2]);
   });
 
-TVM_REGISTER_API("_ComputeOp")
+TVM_REGISTER_API("_ScalarComputeOp")
 .set_body([](TVMArgs args,  TVMRetValue* ret) {
-    *ret = ComputeOpNode::make(args[0],
-                               args[1],
-                               args[2],
-                               args[3],
-                               args[4]);
+    *ret = ScalarComputeOpNode::make(args[0],
+                                     args[1],
+                                     args[2],
+                                     args[3],
+                                     args[4]);
   });
 
 TVM_REGISTER_API("_ScanOp")

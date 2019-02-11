@@ -235,7 +235,7 @@ ReachGraph GetReachGraph(const Array<Operation>& ops) {
               TensorDimKey(init[i], k));
         }
       }
-    } else if (const auto* compute_op = op.as<ComputeOpNode>()) {
+    } else if (const auto* compute_op = op.as<ScalarComputeOpNode>()) {
       std::unordered_map<const Node*, TensorDimKey> vmap;
       const auto& axis = compute_op->axis;
       Tensor t = op.output(0);
@@ -322,7 +322,7 @@ Map<IterVar, Expr> ScanFixPointAnalysis(const Operation& scan_op) {
           f_merge_key(TensorDimKey(t, k), TensorDimKey(init[i], k));
         }
       }
-    } else if (const auto* compute_op = op.as<ComputeOpNode>()) {
+    } else if (const auto* compute_op = op.as<ScalarComputeOpNode>()) {
       std::unordered_map<const Node*, std::vector<TensorDimKey> > vmap;
       const auto& axis = compute_op->axis;
       for (size_t i = 0; i < axis.size(); ++i) {

@@ -135,7 +135,7 @@ def _schedule_depthwise_conv2d_NCHWc_impl(s, cfg, data, kernel, conv_out, output
     tile_ow = cfg["tile_ow"].size[-1]
     # schedule data
     A = data
-    if isinstance(s[A].op, tvm.tensor.ComputeOp):
+    if isinstance(s[A].op, tvm.tensor.ScalarComputeOp):
         batch, ic_chunk, ih, iw, ic_block = s[A].op.axis
         p = s[A].fuse(ic_chunk, ih)
         s[A].parallel(p)

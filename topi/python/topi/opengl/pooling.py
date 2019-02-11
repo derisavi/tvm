@@ -76,7 +76,7 @@ def schedule_pool(outs, layout):
     scheduled_ops = []
 
     def _schedule(PaddedInput, Pool):
-        if isinstance(PaddedInput.op, tvm.tensor.ComputeOp):
+        if isinstance(PaddedInput.op, tvm.tensor.ScalarComputeOp):
             s[PaddedInput].opengl()
         if Pool.op in s.outputs:
             Out = Pool

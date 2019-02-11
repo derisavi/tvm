@@ -33,7 +33,7 @@ inline Schedule MakeDefaultSchedule(const Target &target,
   }
   auto s = create_schedule(out_ops);
   auto x = outs[0];
-  auto axis = s[x]->op.as<ComputeOpNode>()->axis;
+  auto axis = s[x]->op.as<ScalarComputeOpNode>()->axis;
 
   if (auto_inline) {
     tvm::schedule::AutoInlineInjective(s);

@@ -56,7 +56,7 @@ struct ComputeLoopNest {
  * \return The created statement.
  */
 Stmt MakeCrossThreadReduction(
-    const ComputeOpNode* self,
+    const ScalarComputeOpNode* self,
     const Stage& stage,
     const std::unordered_map<IterVar, Range>& dom_map,
     bool debug_keep_trivial_loop);
@@ -69,7 +69,7 @@ Stmt MakeCrossThreadReduction(
  * \param debug_keep_trivial_loop Whether keep trivial loops with extent of 1
  * \return The created statement.
  */
-Stmt MakeTensorize(const ComputeOpNode* self,
+Stmt MakeTensorize(const ScalarComputeOpNode* self,
                    const Stage& stage,
                    const std::unordered_map<IterVar, Range>& dom_map,
                    bool debug_keep_trivial_loop);

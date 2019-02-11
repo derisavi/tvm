@@ -113,7 +113,7 @@ def schedule_depthwise_conv2d_nchw_arm(cfg, outs):
             kernel = op.input_tensors[1]
             data = op.input_tensors[0]
             data_pad = None
-            if isinstance(data.op, tvm.tensor.ComputeOp) and "pad" in data.op.tag:
+            if isinstance(data.op, tvm.tensor.ScalarComputeOp) and "pad" in data.op.tag:
                 data_pad = data
                 data = data_pad.op.input_tensors[0]
             _schedule(cfg, s, data, data_pad, kernel, output)
@@ -127,7 +127,7 @@ def schedule_depthwise_conv2d_nchw_arm(cfg, outs):
                 kernel = kernel_vec.op.input_tensors[0]
             else:
                 kernel = kernel_vec
-            if isinstance(kernel.op, tvm.tensor.ComputeOp) and "dilate" in kernel.op.tag:
+            if isinstance(kernel.op, tvm.tensor.ScalarComputeOp) and "dilate" in kernel.op.tag:
                 s[kernel].compute_inline()
 
             _schedule_spatial_pack(cfg, s, data_vec, kernel_vec, conv, output, outs[0])
@@ -308,7 +308,7 @@ def _schedule_spatial_pack(cfg, s, data_vec, kernel_vec,
 
     data_pad = data_vec.op.input_tensors[0]
     if data_pad.op.name == "data_pad":
-        assert isinstance(data_pad.op, tvm.tensor.ComputeOp)
+        assert isinstance(data_pad.op, tvm.tensor.ScalarComputeOp)
         has_padding = True
     else:
         assert isinstance(data_pad.op, tvm.tensor.PlaceholderOp)

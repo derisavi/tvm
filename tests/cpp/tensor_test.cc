@@ -26,7 +26,7 @@ TEST(Tensor, Reduce) {
   auto C = compute({m, n}, [&](Var i, Var j) {
       return sum(max(1 + A[i][rv] + 1, B[j][rv]), {rv});
       }, "C");
-  LOG(INFO) << C->op.as<ComputeOpNode>()->body;
+  LOG(INFO) << C->op.as<ScalarComputeOpNode>()->body;
 }
 
 int main(int argc, char ** argv) {

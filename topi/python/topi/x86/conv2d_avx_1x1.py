@@ -115,7 +115,7 @@ def _schedule_conv_NCHWc(s, cfg, data, conv_out, last):
 
     # schedule data
     A = data
-    if isinstance(s[A].op, tvm.tensor.ComputeOp):
+    if isinstance(s[A].op, tvm.tensor.ScalarComputeOp):
         batch, ic_chunk, ih, iw, ic_block = s[A].op.axis
         parallel_axis = s[A].fuse(ic_chunk, ih)
         s[A].parallel(parallel_axis)
@@ -184,7 +184,7 @@ def _schedule_conv_NCHWc_int8(s, cfg, data, conv_out, last):
 
     # schedule data
     A = data
-    if isinstance(s[A].op, tvm.tensor.ComputeOp):
+    if isinstance(s[A].op, tvm.tensor.ScalarComputeOp):
         batch, ic_chunk, ih, iw, ic_block = s[A].op.axis
         parallel_axis = s[A].fuse(ic_chunk, ih)
         s[A].parallel(parallel_axis)
