@@ -590,4 +590,22 @@ Stmt TransformUpdate(const Stage& stage,
   return IfThenElse::make(arith::ComputeReduce<ir::Or>(conds, const_true(1)),
                           update, body);
 }
+
+void BuildInputBinding(std::vector<Stmt> &input_bind_nest,
+                       const Tensor &tensor,
+                       const Region &region,
+                       const Buffer &buffer)
+{
+  Stmt nop = Evaluate::make(0);
+  Array<NodeRef> bind_spec{buffer, tensor};
+  Array<Expr> tuple;
+  for (auto const& range : region) {
+    tuple.push_back(range->min);
+    tuple.push_back(range->extent);
+  }
+  input_bind_nest.emplace_back(AttrStmt::make(
+          bind_spec, attr::buffer_bind_scope,
+          Call::make(Handle(), intrinsic::tvm_tuple, tuple, Call::Intrinsic), nop));
+}
+
 }  // namespace tvm

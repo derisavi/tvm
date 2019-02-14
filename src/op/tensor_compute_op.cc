@@ -125,16 +125,7 @@ Stmt TensorComputeOpNode::BuildProvide(
     Tensor tensor = inputs[i];
     Region region = this->input_regions[i];
     Buffer buffer = this->intrin->buffers[i];
-    Array<NodeRef> bind_spec{buffer, tensor};
-
-    Array<Expr> tuple;
-    for (size_t i = 0; i < region.size(); ++i) {
-      tuple.push_back(region[i]->min);
-      tuple.push_back(region[i]->extent);
-    }
-    input_bind_nest.emplace_back(AttrStmt::make(
-        bind_spec, ir::attr::buffer_bind_scope,
-        Call::make(Handle(), ir::intrinsic::tvm_tuple, tuple, Call::Intrinsic), nop));
+    BuildInputBinding(input_bind_nest, tensor, region, buffer);
   }
 
   // output binding
@@ -175,13 +166,10 @@ Stmt TensorComputeOpNode::BuildProvide(
     CHECK_EQ(n.init_predicates.size(), 0U);
     CHECK(this->intrin->body.defined())
         << "Normal store op for intrin " << this << " is not defined";
-    Stmt body = MergeNest(output_bind_nest, this->intrin->body);
-    body = MergeNest(input_bind_nest, body);
+    Stmt body = MergeNests(this->intrin->body, output_bind_nest, input_bind_nest, binder.asserts(), nest);
     body = ir::Substitute(body, vmap);
-    body = MergeNest(binder.asserts(), body);
     body = op::Substitute(body, n.main_vmap);
-    Stmt ret =  MergeNest(nest, body);
-    return ret;
+    return body;
   } else {
     // Need to split reduction
     CHECK(this->intrin->reduce_update.defined())
@@ -199,17 +187,15 @@ Stmt TensorComputeOpNode::BuildProvide(
       std::vector<std::vector<Stmt> > init_nest(
           n.init_nest.begin(), n.init_nest.begin() + tloc + 1);
       init_nest.emplace_back(op::MakeIfNest(n.init_predicates));
-      Stmt init = MergeNest(output_bind_nest, this->intrin->reduce_init);
+      Stmt init = MergeNests(this->intrin->reduce_init, output_bind_nest, init_nest);
       init = op::Substitute(init, n.init_vmap);
-      init = MergeNest(init_nest, init);
       // The update
-      Stmt update = MergeNest(output_bind_nest, this->intrin->reduce_update);
-      update = MergeNest(input_bind_nest, update);
+      Stmt update = MergeNests(this->intrin->reduce_update, output_bind_nest, input_bind_nest,
+                               binder.asserts(), update_nest);
+      update = MergeNest(common, Block::make(init, update));
       update = ir::Substitute(update, vmap);
-      update = MergeNest(binder.asserts(), update);
       update = op::Substitute(update, n.main_vmap);
-      update = MergeNest(update_nest, update);
-      return MergeNest(common, Block::make(init, update));
+      return update;
     } else {
       // When init op is not available, use body op for reset in the first iter.
       CHECK(this->intrin->body.defined())
@@ -217,13 +203,11 @@ Stmt TensorComputeOpNode::BuildProvide(
       Stmt update = TransformUpdate(stage, dom_map, n,
                                     this->intrin->body,
                                     this->intrin->reduce_update);
-      update = MergeNest(output_bind_nest, update);
-      update = MergeNest(input_bind_nest, update);
+      update = MergeNests(update, output_bind_nest, input_bind_nest,
+                          binder.asserts(), update_nest, common);
       update = ir::Substitute(update, vmap);
-      update = MergeNest(binder.asserts(), update);
       update = op::Substitute(update, n.main_vmap);
-      update = MergeNest(update_nest, update);
-      return MergeNest(common, update);
+      return update;
     }
   }
 }

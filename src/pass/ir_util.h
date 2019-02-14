@@ -29,6 +29,13 @@ Stmt MergeNest(const std::vector<Stmt>& nest, Stmt body);
  */
 Stmt MergeNest(const std::vector<std::vector<Stmt> >& nest, Stmt body);
 
+template<typename... Nests, typename T>
+Stmt MergeNest(const T& nest, Nests... nests, Stmt body) {
+  body = MergeNest(nest, body);
+  body = MergeNest(nests..., body);
+  return body;
+}
+
 /*!
  * \brief combine sequence of operations.
  * \param seq The sequence.

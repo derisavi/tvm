@@ -345,18 +345,10 @@ Stmt MakeTensorize(const ScalarComputeOpNode* self,
   for (size_t i = 0; i < intrin->inputs.size(); ++i) {
     Tensor tensor = inputs[i];
     Buffer buffer = intrin->buffers[i];
-    Array<NodeRef> bind_spec{buffer, tensor};
     auto it = in_region.find(tensor);
     CHECK(it != in_region.end());
     const Array<Range>& region = it->second;
-    Array<Expr> tuple;
-    for (const Range r : region) {
-      tuple.push_back(r->min);
-      tuple.push_back(r->extent);
-    }
-    input_bind_nest.emplace_back(AttrStmt::make(
-        bind_spec, ir::attr::buffer_bind_scope,
-        Call::make(Handle(), ir::intrinsic::tvm_tuple, tuple, Call::Intrinsic), nop));
+    BuildInputBinding(input_bind_nest, tensor, region, buffer);
   }
   // output binding
   const ScalarComputeOpNode* intrin_compute = intrin->op.as<ScalarComputeOpNode>();
@@ -409,12 +401,10 @@ Stmt MakeTensorize(const ScalarComputeOpNode* self,
     CHECK_EQ(n.init_predicates.size(), 0U);
     CHECK(intrin->body.defined())
         << "Normal store op for intrin " << intrin << " is not defined";
-    Stmt body = MergeNest(output_bind_nest, intrin->body);
-    body = MergeNest(input_bind_nest, body);
+    Stmt body = MergeNest(output_bind_nest, input_bind_nest, binder.asserts(), nest, intrin->body);
     body = Substitute(body, vmap);
-    body = MergeNest(binder.asserts(), body);
     body = Substitute(body, n.main_vmap);
-    return MergeNest(nest, body);
+    return body;
   } else {
     // Need to split reduction
     CHECK(intrin->reduce_update.defined())
@@ -432,17 +422,15 @@ Stmt MakeTensorize(const ScalarComputeOpNode* self,
       std::vector<std::vector<Stmt> > init_nest(
           n.init_nest.begin(), n.init_nest.begin() + tloc + 1);
       init_nest.emplace_back(op::MakeIfNest(n.init_predicates));
-      Stmt init = MergeNest(output_bind_nest, intrin->reduce_init);
+      Stmt init = MergeNests(intrin->reduce_init, output_bind_nest, init_nest);
       init = Substitute(init, n.init_vmap);
-      init = MergeNest(init_nest, init);
       // The update
-      Stmt update = MergeNest(output_bind_nest, intrin->reduce_update);
-      update = MergeNest(input_bind_nest, update);
+      Stmt update = MergeNests(intrin->reduce_update, output_bind_nest, input_bind_nest,
+                               binder.asserts(), update_nest);
+      update =  MergeNest(common, Block::make(init, update));
       update = Substitute(update, vmap);
-      update = MergeNest(binder.asserts(), update);
       update = Substitute(update, n.main_vmap);
-      update = MergeNest(update_nest, update);
-      return MergeNest(common, Block::make(init, update));
+      return update;
     } else {
       // When init op is not available, use body op for reset in the first iter.
       CHECK(intrin->body.defined())
@@ -450,13 +438,11 @@ Stmt MakeTensorize(const ScalarComputeOpNode* self,
       Stmt update = TransformUpdate(stage, dom_map, n,
                                     intrin->body,
                                     intrin->reduce_update);
-      update = MergeNest(output_bind_nest, update);
-      update = MergeNest(input_bind_nest, update);
+      update = MergeNests(update, output_bind_nest, input_bind_nest, binder.asserts(),
+                          update_nest, common);
       update = Substitute(update, vmap);
-      update = MergeNest(binder.asserts(), update);
       update = Substitute(update, n.main_vmap);
-      update = MergeNest(update_nest, update);
-      return MergeNest(common, update);
+      return update;
     }
   }
 }

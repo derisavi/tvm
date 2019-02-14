@@ -88,6 +88,14 @@ Stmt TransformUpdate(const Stage& stage,
                      const ComputeLoopNest& n,
                      Stmt body,
                      Stmt update);
+
+
+
+void BuildInputBinding(std::vector<Stmt> &input_bind_nest,
+                       const Tensor &tensor,
+                       const Region &region,
+                       const Buffer &buffer);
+
 }  // namespace tvm
 
 #endif  // TVM_OP_COMPUTE_OP_H_
