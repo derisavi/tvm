@@ -463,6 +463,7 @@ std::vector<Expr> MakeBoundCheck(
     bound_state[iv] = false;
   }
   PassUpBoundCheck(stage, dom_map, &bound_state);
+  std::cout << "stage "<< stage << " relations at MakeBoundCheck: " << stage->relations << std::endl;
 
   std::vector<Expr> preds;
   std::unordered_map<const Variable*, IntSet> iset_dmap;

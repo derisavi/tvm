@@ -176,7 +176,7 @@ void PrepareAxisMapping(Stage orig_stage,
                         Array<IterVar>* p_new_axis,
                         std::unordered_map<IterVar, Range>* p_dom_map,
                         std::unordered_map<const Variable*, Expr>* p_vsub,
-                        std::unordered_map<const Variable*, Expr>* p_vsub2newvar,
+                        std::unordered_map<const Variable*, IterVar>* p_vsub2newvar,
                         std::vector<Expr>* p_predicates) {
   auto& red_axis = *p_red_axis;
   auto& new_axis = *p_new_axis;
@@ -207,7 +207,7 @@ void PrepareAxisMapping(Stage orig_stage,
         value_map[iv] = dom->min;
       } else {
         value_map[iv] = iv->var;
-        vsub2newvar[iv->var.get()] = new_iv->var;
+        vsub2newvar[iv->var.get()] = new_iv;
       }
     }
     // skip reduction iteration.
@@ -232,7 +232,8 @@ Array<Tensor> ReplaceOriginalOp(Schedule sch,
                                 const std::string& scope,
                                 Operation cache_op,
                                 Operation orig_new_op,
-                                size_t tensor_size) {
+                                size_t tensor_size,
+                                const std::unordered_map<const Variable*, IterVar>& vsub2newvar) {
   Array<Tensor> cache_tensor_list;
   for (size_t i = 0; i < tensor_size; i++) {
     Tensor cache_tensor = cache_op.output(i);
@@ -247,7 +248,40 @@ Array<Tensor> ReplaceOriginalOp(Schedule sch,
     vmap[orig_stage->op.output(0)] = orig_new_op.output(0);
     rvmap[orig_new_op.output(0)] = orig_stage->op.output(0);
   }
+  for (Stage s : sch->stages) {
+    std::cout << "relations: " << s->relations.size() << std::endl;
+  }
+
+
+
   ReplaceDataFlow(sch->stages, &vmap, &rvmap);
+  Stage cache_stage = Stage(cache_op);
+  std::cout << "orig_stage->relations=" << orig_stage->relations << std::endl;
+  /*
+  for (auto const& rel : orig_stage->relations) {
+    if (const SplitNode* s = rel.as<SplitNode>()) {
+      cache_stage->relations.push_back(
+              SplitNode::make(vsub2newvar.at(s->parent->var.get()),
+                              vsub2newvar.at(s->outer->var.get()),
+                              vsub2newvar.at(s->inner->var.get()),
+                              s->factor, s->nparts));
+    } else if (const FuseNode* s = rel.as<FuseNode>()) {
+      cache_stage->relations.push_back(
+              FuseNode::make(vsub2newvar.at(s->outer->var.get()),
+                             vsub2newvar.at(s->inner->var.get()),
+                             vsub2newvar.at(s->fused->var.get())));
+    } else if (const RebaseNode* s = rel.as<RebaseNode>()) {
+      cache_stage->relations.push_back(
+              RebaseNode::make(vsub2newvar.at(s->parent->var.get()),
+                               vsub2newvar.at(s->rebased->var.get())));
+    } else if (const SingletonNode* s = rel.as<SingletonNode>()) {
+      cache_stage->relations.push_back(
+              SingletonNode::make(vsub2newvar.at(s->iter->var.get())));
+    } else {
+      LOG(FATAL) << "unknown relation type";
+    }
+  }
+   */
   // mutate orig stage
   orig_stage->op = orig_new_op;
   orig_stage->all_iter_vars = orig_stage->op->root_iter_vars();
@@ -256,8 +290,10 @@ Array<Tensor> ReplaceOriginalOp(Schedule sch,
   // create schedule for new cached stage.
   ArrayNode* stages = sch->stages.CopyOnWrite();
   size_t pos = FindNodeRef(stages, orig_stage);
-  Stage cache_stage = Stage(cache_op);
   cache_stage.set_scope(scope);
+  std::cout << "cache_stage.name=" << cache_stage << std::endl;
+  std::cout << cache_stage->relations << std::endl;
+
   CHECK_LT(pos, stages->data.size());
   stages->data.insert(stages->data.begin() + pos,
                       cache_stage.node_);
@@ -275,6 +311,9 @@ Array<Tensor> ReplaceOriginalOp(Schedule sch,
 Array<Tensor> CacheWriteWithReLayout(Schedule sch,
                                      const Array<Tensor>& tensor_array,
                                      const std::string& scope) {
+  for (auto const& s : sch->stages) {
+    std::cout << "relations: " << s->relations << std::endl;
+  }
   size_t tensor_size = tensor_array.size();
   sch->InvalidateCache();
   Tensor tensor = tensor_array[0];
@@ -286,11 +325,15 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
   std::unordered_map<IterVar, Range> dom_map;
 
   std::unordered_map<const Variable*, Expr> vsub;
-  std::unordered_map<const Variable*, Expr> vsub2newvar;
+  std::unordered_map<const Variable*, IterVar> vsub2newvar;
   std::vector<Expr> predicates;
 
   PrepareAxisMapping(orig_stage, compute,
     &red_axis, &new_axis, &dom_map, &vsub, &vsub2newvar, &predicates);
+  std::unordered_map<const Variable*, Expr> vsub2newexpr;
+  for (auto const& kv : vsub2newvar) {
+    vsub2newexpr[kv.first] = kv.second->var;
+  }
 
   Expr body;
   Array<Expr> body_list;
@@ -298,7 +341,7 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
   for (auto cbody : compute->body) {
     body = VarReplacer(vsub).Mutate(cbody);
     body = InjectPredicate(predicates, body);
-    body = VarReplacer(vsub2newvar).Mutate(body);
+    body = VarReplacer(vsub2newexpr).Mutate(body);
     // Reduce nodes in ONE computeOp must be the same except value_index
     // This is right only if the original body ensures Reduce nodes are the same
     if (body->is_type<ir::Reduce>()) {
@@ -346,7 +389,7 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
       compute->name, compute->tag, compute->attrs,
       compute->axis, cache_expr_list);
   return ReplaceOriginalOp(sch, orig_stage, scope,
-    cache_op, orig_new_op, tensor_size);
+    cache_op, orig_new_op, tensor_size, vsub2newvar);
 }
 
 
@@ -367,11 +410,15 @@ Array<Tensor> CacheWriteWithReLayoutTensor(Schedule sch,
   std::unordered_map<IterVar, Range> dom_map;
 
   std::unordered_map<const Variable*, Expr> vsub;
-  std::unordered_map<const Variable*, Expr> vsub2newvar;
+  std::unordered_map<const Variable*, IterVar> vsub2newvar;
   std::vector<Expr> predicates;
 
   PrepareAxisMapping(orig_stage, tensor_op,
     &red_axis, &new_axis, &dom_map, &vsub, &vsub2newvar, &predicates);
+  std::unordered_map<const Variable*, Expr> vsub2newexpr;
+  for (auto const& kv : vsub2newvar) {
+    vsub2newexpr[kv.first] = kv.second->var;
+  }
 
 
   for (int i = tensor_op->schedulable_ndim; i < static_cast<int>(tensor_op->axis.size()); ++i) {
@@ -384,8 +431,8 @@ Array<Tensor> CacheWriteWithReLayoutTensor(Schedule sch,
   for (Region old_region : tensor_op->input_regions) {
     Region region;
     for (Range r : old_region) {
-      Expr min = VarReplacer(vsub2newvar).Mutate(r->min);
-      Expr extent = VarReplacer(vsub2newvar).Mutate(r->extent);
+      Expr min = VarReplacer(vsub2newexpr).Mutate(r->min);
+      Expr extent = VarReplacer(vsub2newexpr).Mutate(r->extent);
       region.push_back(Range::make_by_min_extent(min, extent));
     }
     new_regions.push_back(region);
@@ -433,7 +480,7 @@ Array<Tensor> CacheWriteWithReLayoutTensor(Schedule sch,
       tensor_op->name, tensor_op->tag, {},
       compute_axis, cache_expr_list);
   return ReplaceOriginalOp(sch, orig_stage, scope,
-    cache_op, orig_new_op, tensor_size);
+    cache_op, orig_new_op, tensor_size, vsub2newvar);
 }
 
 

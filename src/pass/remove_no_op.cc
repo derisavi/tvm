@@ -49,11 +49,17 @@ class NoOpRemover : public IRMutator {
     }
   }
   Stmt Mutate_(const For* op, const Stmt& s) final {
+    if (can_prove(op->extent <= 0)) return MakeEvaluate(0);
     Stmt stmt = IRMutator::Mutate_(op, s);
     op = stmt.as<For>();
     return is_no_op(op->body) ? MakeEvaluate({op->min, op->extent}) : stmt;
   }
   Stmt Mutate_(const Allocate* op, const Stmt& s) final {
+    for (const auto &e : op->extents) {
+      if (can_prove(e <= 0)) {
+        return MakeEvaluate(0);
+      }
+    }
     Stmt stmt = IRMutator::Mutate_(op, s);
     op = stmt.as<Allocate>();
     return is_no_op(op->body) ? MakeEvaluate(op->extents) : stmt;

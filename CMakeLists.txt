@@ -93,6 +93,7 @@ else(MSVC)
       CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CMAKE_CXX_FLAGS "-faligned-new ${CMAKE_CXX_FLAGS}")
   endif()
+  set(CMAKE_SHARED_LINKER_FLAGS  "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=gold")
 endif(MSVC)
 
 # add source group
