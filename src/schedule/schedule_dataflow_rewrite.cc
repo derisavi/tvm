@@ -289,6 +289,42 @@ Array<Tensor> ReplaceOriginalOp(Schedule sch,
   return cache_tensor_list;
 }
 
+Operation GetCacheComputeNode(const BaseComputeOpNode *op,
+                              const Operation &cache_op,
+                              size_t tensor_size,
+                              const Array<IterVar> &compute_axis,
+                              const Stage &orig_stage,
+                              const std::unordered_map<IterVar, Range> &dom_map,
+                              const std::unordered_set<IterVar> &red_axis)
+{
+  // The reader args
+  Array<Expr> args;
+  // cache->compute
+  std::unordered_map<IterVar, Expr> value_map;
+  for (IterVar iv : compute_axis) {
+    value_map[iv] = iv->var;
+  }
+  schedule::PassDownIndex(orig_stage, dom_map, &value_map, true);
+  for (IterVar iv : orig_stage->leaf_iter_vars) {
+    if (red_axis.count(iv)) continue;
+    args.push_back(value_map.at(iv));
+  }
+  // tensorized region axis
+  for (size_t i = op->num_schedulable_dims(); i < op->axis.size(); ++i) {
+    IterVar iv = compute_axis[i];
+    args.push_back(value_map.at(iv));
+  }
+
+  Array<Expr> cache_expr_list;
+  for (size_t i = 0; i < tensor_size; i++) {
+    Tensor cache_tensor = cache_op.output(i);
+    cache_expr_list.push_back(cache_tensor(args));
+  }
+  Operation orig_new_op = ComputeOpNode::make(
+          op->name, op->tag, op->attrs,
+          compute_axis, cache_expr_list);
+  return orig_new_op;
+}
 
 // Cache write and relayout the data according to loop pattern
 Array<Tensor> CacheWriteWithReLayout(Schedule sch,
@@ -338,32 +374,11 @@ Array<Tensor> CacheWriteWithReLayout(Schedule sch,
     }
     body_list.push_back(body);
   }
-  // The reader args
-  Array<Expr> args;
-  {
-    // cache->compute
-    std::unordered_map<IterVar, Expr> value_map;
-    for (IterVar iv : compute->axis) {
-      value_map[iv] = iv->var;
-    }
-    schedule::PassDownIndex(orig_stage, dom_map, &value_map, true);
-    for (IterVar iv : orig_stage->leaf_iter_vars) {
-      if (red_axis.count(iv)) continue;
-      args.push_back(value_map.at(iv));
-    }
-  }
   Operation cache_op = ComputeOpNode::make(
-      compute->name + "." + scope, compute->tag, compute->attrs,
-      new_axis, body_list);
-
-  Array<Expr> cache_expr_list;
-  for (size_t i = 0; i < tensor_size; i++) {
-    Tensor cache_tensor = cache_op.output(i);
-    cache_expr_list.push_back(cache_tensor(args));
-  }
-  Operation orig_new_op = ComputeOpNode::make(
-      compute->name, compute->tag, compute->attrs,
-      compute->axis, cache_expr_list);
+          compute->name + "." + scope, compute->tag, compute->attrs,
+          new_axis, body_list);
+  Operation orig_new_op = GetCacheComputeNode(compute, cache_op, tensor_size,
+                                              compute->axis, orig_stage, dom_map, red_axis);
   return ReplaceOriginalOp(sch, orig_stage, scope,
     cache_op, orig_new_op, tensor_size);
 }
@@ -423,34 +438,9 @@ Array<Tensor> CacheWriteWithReLayoutTensor(Schedule sch,
     compute_axis.Set(i, aiv);
   }
 
-  // The reader args
-  Array<Expr> args;
-  {
-    // cache->compute
-    std::unordered_map<IterVar, Expr> value_map;
-    for (IterVar iv : compute_axis) {
-      value_map[iv] = iv->var;
-    }
-    schedule::PassDownIndex(orig_stage, dom_map, &value_map, true);
-    for (IterVar iv : orig_stage->leaf_iter_vars) {
-      if (red_axis.count(iv)) continue;
-      args.push_back(value_map.at(iv));
-    }
-    // tensorized region axis
-    for (size_t i = tensor_op->schedulable_ndim; i < tensor_op->axis.size(); ++i) {
-      IterVar iv = compute_axis[i];
-      args.push_back(value_map.at(iv));
-    }
-  }
 
-  Array<Expr> cache_expr_list;
-  for (size_t i = 0; i < tensor_size; i++) {
-    Tensor cache_tensor = cache_op.output(i);
-    cache_expr_list.push_back(cache_tensor(args));
-  }
-  Operation orig_new_op = ComputeOpNode::make(
-      tensor_op->name, tensor_op->tag, {},
-      compute_axis, cache_expr_list);
+  Operation orig_new_op = GetCacheComputeNode(tensor_op, cache_op, tensor_size,
+                                              compute_axis, orig_stage, dom_map, red_axis);
   return ReplaceOriginalOp(sch, orig_stage, scope,
     cache_op, orig_new_op, tensor_size);
 }
